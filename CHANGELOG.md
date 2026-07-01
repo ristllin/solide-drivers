@@ -27,4 +27,9 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   refresh `fastFull : 2212000 µs` (~2.2 s, identical to the original), WS_20_30 LUT
   subclass intact, heap flat. Display got the approved **API trim**: no app/branding
   `StatusInfo` — generic `requestText`/`requestMenu`/`showArt`/`requestBitmap`/`clear`.
-  Remaining: `memory` (NVS+SD), `selftest` + the serial protocol, integration example.
+  **`memory`** (NVS typed KV + SD JSON/blob under `/memory/`), **`selftest`** (the
+  agent-drivable serial `TEST <name>` -> `RESULT <name> PASS|FAIL|SKIP` protocol),
+  the `solide::begin()` aggregate + `solide.h` umbrella, and `examples/08_selftest_console`.
+  **M2 done — `RESULT all PASS (6/6)` on hardware:** led/epd/sd/memory/input all PASS
+  (SD 14.9 GB working, NVS+JSON round-trip), audio SKIP (deferred to M3). Heap flat
+  ~314 KB. The whole non-audio driver layer runs on Arduino 3.1.3 / IDF 5.3.
