@@ -23,5 +23,8 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   (pioarduino) added. Ported to `solide::` + the `Board` pin struct: `leds`
   (**hardware-validated** on the modern platform — ring lights, and heap stays flat
   at ~343 KB across frames, confirming no per-show RMT leak on IDF5), `storage` (SD),
-  `input` (encoder). Compile clean on Arduino 3.1.3 / IDF 5.3. Remaining:
-  `display` (with the API trim), `memory` (NVS+SD), `selftest` + the serial protocol.
+  `input` (encoder), and **`display`** (e-paper) — **hardware-validated**: fast B/W
+  refresh `fastFull : 2212000 µs` (~2.2 s, identical to the original), WS_20_30 LUT
+  subclass intact, heap flat. Display got the approved **API trim**: no app/branding
+  `StatusInfo` — generic `requestText`/`requestMenu`/`showArt`/`requestBitmap`/`clear`.
+  Remaining: `memory` (NVS+SD), `selftest` + the serial protocol, integration example.
