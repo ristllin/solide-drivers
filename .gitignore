@@ -1,0 +1,8 @@
+.pio/
+**/.pio/
+.vscode/
+.DS_Store
+__pycache__/
+*.pyc
+*.bin
+*.elf
