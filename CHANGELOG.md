@@ -19,3 +19,9 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   modules the audio loopback needs — `wav` (RIFF parse/build) and `tone`
   (Goertzel + RMS/peak). **47 host tests pass** (`pio test -e native`), validating
   the package build system (`test_build_src` for `src/portable`).
+- **M2 — device drivers (in progress):** device build env `[env:esp32s3]`
+  (pioarduino) added. Ported to `solide::` + the `Board` pin struct: `leds`
+  (**hardware-validated** on the modern platform — ring lights, and heap stays flat
+  at ~343 KB across frames, confirming no per-show RMT leak on IDF5), `storage` (SD),
+  `input` (encoder). Compile clean on Arduino 3.1.3 / IDF 5.3. Remaining:
+  `display` (with the API trim), `memory` (NVS+SD), `selftest` + the serial protocol.
