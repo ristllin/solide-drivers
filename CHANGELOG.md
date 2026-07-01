@@ -32,4 +32,16 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   the `solide::begin()` aggregate + `solide.h` umbrella, and `examples/08_selftest_console`.
   **M2 done — `RESULT all PASS (6/6)` on hardware:** led/epd/sd/memory/input all PASS
   (SD 14.9 GB working, NVS+JSON round-trip), audio SKIP (deferred to M3). Heap flat
-  ~314 KB. The whole non-audio driver layer runs on Arduino 3.1.3 / IDF 5.3.
+  ~314 KB. The whole non-audio driver layer runs on the modern toolchain.
+- **Toolchain bump:** moved from pioarduino `53.03.13` (Arduino 3.1.3 / IDF 5.3) to
+  **`55.03.39` (Arduino 3.3.9 / IDF 5.5.4)**. 3.1.3 has a regression that breaks the new
+  I2S driver on PSRAM boards (`gdma: user context not in internal RAM`), fixed on 3.3.x.
+  All of M0–M2 re-validated on 3.3.9 (`RESULT all PASS`). See `docs/modernization.md`.
+- **M3 — audio rewrite (done):** `solide::audio` reimplemented on the ESP-IDF 5 channel
+  API — `driver/i2s_std` (speaker TX) + `driver/i2s_pdm` (mic RX); public API unchanged.
+  Configs built field-by-field (the IDF `*_DEFAULT_CONFIG` macros are C-designated-init,
+  which breaks under C++). **TX hardware-validated** (init clean, `playPcm` plays beeps).
+  **RX driver validated** (init + `i2s_channel_read` succeed at 16 kHz mono), but the mic
+  reads a constant `-30935` = "no data on the data line" per ESP-IDF #12382 — a **mic
+  hardware issue** (the original build never capture-validated the mic), not the driver.
+  The acoustic loopback (M4) is gated on the mic delivering data. `examples/07_audio_play_record`.
