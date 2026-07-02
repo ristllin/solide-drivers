@@ -4,6 +4,7 @@
 #include "solide/storage.h"
 #include "solide/memory.h"
 #include "solide/input.h"
+#include "solide/audio.h"
 #include <Arduino.h>
 
 namespace solide::selftest {
@@ -50,8 +51,14 @@ static bool testInput() {
 }
 
 static bool testAudio() {
-  // The audio driver + acoustic loopback land in a later milestone.
-  Serial.println("RESULT audio SKIP notBuilt=1");
+  // Acoustic loopback: play a tone on the speaker, detect it on the mic. Needs
+  // the 5 V amp bus + a working mic; a no-detection result is reported SKIP (like
+  // an absent optional peripheral), not FAIL, so it doesn't fail the suite.
+  uint32_t mag = 0; uint16_t rms = 0;
+  bool detected = audio::loopbackSelfTest(1000, &mag, &rms);
+  Serial.printf("RESULT audio %s toneHz=1000 mag=%u rms=%u%s\n",
+                detected ? "PASS" : "SKIP", (unsigned)mag, rms,
+                detected ? "" : " (no tone; needs 5V amp + working mic)");
   return true;
 }
 

@@ -1,9 +1,11 @@
 #include "solide/audio.h"
 #include "solide/boards/board_solide_s3.h"
 #include "solide/wav.h"
+#include "solide/tone.h"
 #include "driver/i2s_std.h"
 #include "driver/i2s_pdm.h"
 #include "esp_heap_caps.h"
+#include <math.h>
 
 // IDF5 channel-API rewrite of the legacy-I2S driver. Every config struct is
 // initialized FIELD-BY-FIELD (not via the IDF I2S_*_DEFAULT_CONFIG macros): those
@@ -239,6 +241,47 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
   f.close();
   micDeinit();
   return bytesWritten;
+}
+
+// ---- acoustic loopback self-test --------------------------------------------
+// TX (I2S1) + PDM-RX (I2S0) are independent, so a play task can run while the
+// caller records. NOTE: unvalidated as of the initial build — needs the 5 V amp
+// bus + a working mic; the detection threshold is a starting point to tune on
+// real hardware.
+struct LbCtx { const int16_t* tone; size_t n; uint32_t rate; volatile bool done; };
+
+static void lbPlayTask(void* p) {
+  LbCtx* c = (LbCtx*)p;
+  playPcm(c->tone, c->n, c->rate);
+  c->done = true;
+  vTaskDelete(nullptr);
+}
+
+bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut) {
+  const uint32_t rate = 16000;
+  const size_t   n    = rate * 400 / 1000;   // 400 ms tone + capture window
+  int16_t* tone = (int16_t*)heap_caps_malloc(n * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+  int16_t* rec  = (int16_t*)heap_caps_malloc(n * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+  if (!tone || !rec) { if (tone) heap_caps_free(tone); if (rec) heap_caps_free(rec); return false; }
+  for (size_t i = 0; i < n; i++)
+    tone[i] = (int16_t)(8000.0f * sinf(2.0f * (float)M_PI * toneHz * (float)i / (float)rate));
+
+  static LbCtx ctx;                          // static: outlives this frame for the play task
+  ctx.tone = tone; ctx.n = n; ctx.rate = rate; ctx.done = false;
+  TaskHandle_t th = nullptr;
+  xTaskCreatePinnedToCore(lbPlayTask, "lbplay", 4096, &ctx, 1, &th, 0);
+
+  size_t got = recordToBuffer(rec, n, 700, nullptr);      // records while the tone plays
+  uint32_t guard = millis();
+  while (!ctx.done && millis() - guard < 500) delay(5);    // let the play task finish
+
+  float mag = tone::goertzel(rec, got, rate, toneHz);
+  uint16_t r = tone::rms(rec, got);
+  if (magOut) *magOut = (uint32_t)mag;
+  if (rmsOut) *rmsOut = r;
+  heap_caps_free(tone);
+  heap_caps_free(rec);
+  return mag > 1000.0f;                       // detection threshold — tune on hardware
 }
 
 // ---- lifecycle ---------------------------------------------------------------

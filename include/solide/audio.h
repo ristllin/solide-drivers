@@ -28,6 +28,13 @@ void spkClose();                                        // flush + close
 size_t recordToBuffer(int16_t* out, size_t maxSamples, uint32_t maxMs, const volatile bool* stopFlag);
 size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile bool* stopFlag);
 
+// ---- speaker->mic acoustic loopback self-test ----
+// Plays a `toneHz` tone on the speaker while recording on the mic (TX on I2S1,
+// PDM-RX on I2S0 run concurrently), then Goertzel-detects the tone in the capture.
+// Returns true if the tone is present. `magOut`/`rmsOut` (optional) report the
+// measured tone magnitude and record RMS. NEEDS the 5 V amp bus + a working mic.
+bool loopbackSelfTest(uint16_t toneHz = 1000, uint32_t* magOut = nullptr, uint16_t* rmsOut = nullptr);
+
 constexpr uint32_t kMicSampleRate    = 16000;
 constexpr uint8_t  kMicBitsPerSample = 16;
 
