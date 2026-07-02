@@ -13,35 +13,84 @@
     "framework": "arduino"
   },
   "reserved_gpio": {
-    "strapping": [0, 45, 46],
-    "usb": [19, 20],
-    "uart0": [43, 44],
-    "flash": [26, 27, 28, 29, 30, 31, 32],
-    "octal_psram": [33, 34, 35, 36, 37],
-    "onboard_rgb_repurposed_as_encoder_sw": [48]
+    "strapping": [
+      0,
+      45,
+      46
+    ],
+    "usb": [
+      19,
+      20
+    ],
+    "uart0": [
+      43,
+      44
+    ],
+    "flash": [
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "octal_psram": [
+      33,
+      34,
+      35,
+      36,
+      37
+    ],
+    "onboard_rgb_repurposed_as_encoder_sw": [
+      48
+    ]
   },
-  "free_gpio": [3, 4, 5, 6, 9, 18],
+  "free_gpio": [
+    3,
+    4,
+    5,
+    6,
+    9,
+    18
+  ],
   "peripherals": {
     "sd": {
       "namespace": "solide::storage",
       "bus": "FSPI/SPI2",
-      "pins": { "cs": 10, "mosi": 11, "sck": 12, "miso": 13 },
+      "pins": {
+        "cs": 10,
+        "mosi": 11,
+        "sck": 12,
+        "miso": 13
+      },
       "volts": 3.3,
       "fs": "FAT32"
     },
     "display": {
       "namespace": "solide::display",
       "bus": "HSPI/SPI3",
-      "pins": { "sck": 38, "mosi": 39, "cs": 40, "dc": 41, "rst": 42, "busy": 47 },
+      "pins": {
+        "sck": 38,
+        "mosi": 39,
+        "cs": 40,
+        "dc": 41,
+        "rst": 42,
+        "busy": 47
+      },
       "volts": 3.3,
       "panel": "WeAct 2.9in 3-colour SSD1680",
-      "driver": "GxEPD2 (GxEPD2_290_C90fast + GxEPD2_290_C90c)",
-      "refresh_ms": { "bw_fast": 2200, "colour_3c": 18500 }
+      "refresh_ms": {
+        "bw_fast": 2200,
+        "colour_3c": 18500
+      }
     },
     "led": {
       "namespace": "solide::leds",
       "chip": "WS2812B",
-      "pins": { "din": 21 },
+      "pins": {
+        "din": 21
+      },
       "count": 45,
       "logic_v": 3.3,
       "power_v": 5,
@@ -50,7 +99,11 @@
     "encoder": {
       "namespace": "solide::input",
       "type": "EC11",
-      "pins": { "a": 1, "b": 2, "sw": 48 },
+      "pins": {
+        "a": 1,
+        "b": 2,
+        "sw": 48
+      },
       "volts": 3.3,
       "steps_per_detent": 4
     },
@@ -58,33 +111,58 @@
       "namespace": "solide::audio",
       "bus": "I2S-std-TX (I2S1)",
       "amp": "NS4168",
-      "pins": { "bclk": 7, "lrclk": 8, "din": 17 },
+      "pins": {
+        "bclk": 7,
+        "lrclk": 8,
+        "din": 17
+      },
       "volts": 3.3,
       "note": "amp needs the 5 V bus for volume"
     },
     "mic": {
       "namespace": "solide::audio",
       "bus": "I2S-PDM-RX (I2S0)",
-      "pins": { "clk": 15, "data": 16 },
+      "pins": {
+        "clk": 15,
+        "data": 16
+      },
       "volts": 3.3,
       "format": "16 kHz / 16-bit / mono",
       "caveat": "shared VCC 3.3 V ONLY; 5 V damages the S3 (mic DATA follows VCC)"
     },
     "memory": {
       "namespace": "solide::memory",
-      "backends": ["NVS (typed key-value, <=15-char keys)", "SD JSON/blob under /memory/"]
+      "backends": [
+        "NVS (typed key-value, <=15-char keys)",
+        "SD JSON/blob under /memory/"
+      ]
     }
   },
   "namespaces": [
-    "solide::display", "solide::leds", "solide::ring", "solide::audio",
-    "solide::storage", "solide::memory", "solide::input", "solide::menu",
-    "solide::art", "solide::selftest"
+    "solide::display",
+    "solide::leds",
+    "solide::ring",
+    "solide::audio",
+    "solide::storage",
+    "solide::memory",
+    "solide::input",
+    "solide::menu",
+    "solide::art",
+    "solide::selftest"
   ],
   "power": {
     "source": "USB-C 2S BMS -> 2x18650 series -> DC-DC -> 5 V bus",
     "rails": {
-      "3v3": ["esp32-s3", "display", "sd", "audio board (amp + mic)"],
-      "5v": ["led ring", "audio amp volume headroom"]
+      "3v3": [
+        "esp32-s3",
+        "display",
+        "sd",
+        "audio board (amp + mic)"
+      ],
+      "5v": [
+        "led ring",
+        "audio amp volume headroom"
+      ]
     }
   },
   "build": {
