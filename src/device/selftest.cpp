@@ -30,6 +30,7 @@ static bool testSd() {
   if (!avail) { Serial.println("RESULT sd SKIP available=0 (no card)"); return true; }
   storage::writeFile("/selftest.txt", "solide-ok");
   bool rt = (storage::readFile("/selftest.txt") == "solide-ok");
+  storage::remove("/selftest.txt");   // leave no residue on the card
   Serial.printf("RESULT sd %s available=1 readback=%d sizeMB=%llu freeMB=%llu\n",
                 rt ? "PASS" : "FAIL", rt, storage::cardSizeMB(), storage::freeMB());
   return rt;
@@ -38,7 +39,7 @@ static bool testSd() {
 static bool testMemory() {
   bool nvs = memory::ok();
   bool rt = false;
-  if (nvs) { memory::setInt("st_probe", 4242); rt = (memory::getInt("st_probe", 0) == 4242); }
+  if (nvs) { memory::setInt("st_probe", 4242); rt = (memory::getInt("st_probe", 0) == 4242); memory::eraseKey("st_probe"); }
   Serial.printf("RESULT memory %s nvs=%d roundtrip=%d jsonBackend=%d\n",
                 (nvs && rt) ? "PASS" : "FAIL", nvs, rt, storage::available());
   return nvs && rt;

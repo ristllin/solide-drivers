@@ -71,8 +71,23 @@ static void test_wav_walks_extra_chunk() {
   TEST_ASSERT_EQUAL_UINT32(8, info.dataBytes);
 }
 
+static void test_wav_rejects_overflow_chunk() {
+  // A junk chunk claiming a huge size must not wrap the offset / hang the walk;
+  // parseHeader returns false (data unreachable) rather than looping forever.
+  uint8_t b[128]; memset(b, 0, sizeof(b));
+  size_t o = 0;
+  memcpy(b, "RIFF", 4); o = 4; o += 4; memcpy(b + 8, "WAVE", 4); o = 12;
+  uint8_t fmt[16] = {0}; fmt[0] = 1; fmt[2] = 1; fmt[4] = 0x80; fmt[5] = 0x3E; fmt[14] = 16;
+  put(b, o, "fmt ", fmt, 16);
+  memcpy(b + o, "junk", 4); o += 4;                       // chunk id
+  b[o] = 0xE0; b[o + 1] = 0xFF; b[o + 2] = 0xFF; b[o + 3] = 0xFF;   // sz = 0xFFFFFFE0
+  WavInfo info;
+  TEST_ASSERT_FALSE(parseHeader(b, sizeof(b), info));    // no hang, no wrap -> false
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_wav_rejects_overflow_chunk);
   RUN_TEST(test_wav_roundtrip);
   RUN_TEST(test_wav_stereo_reported);
   RUN_TEST(test_wav_rejects_non_riff);

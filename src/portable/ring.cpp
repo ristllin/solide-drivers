@@ -201,7 +201,7 @@ int cometHead(uint32_t t, int len, uint16_t stepMs) {
 }
 
 uint8_t cometFalloff(int distFromHead, int tail) {
-  if (distFromHead < 0 || distFromHead >= tail) return 0;
+  if (distFromHead < 0 || distFromHead >= tail || distFromHead >= 31) return 0;  // shift-safe
   return (uint8_t)(255u >> distFromHead);   // 255,127,63,31,... within the tail
 }
 

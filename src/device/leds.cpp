@@ -212,6 +212,7 @@ static void task(void*) {
 // ---- public API -------------------------------------------------------------
 
 bool begin() {
+  if (g_task) return true;   // idempotent — a second call is a safe no-op
   g_ring.begin();
   g_bright = (uint8_t)LED_BRIGHTNESS;
   g_ring.setBrightness(g_bright);

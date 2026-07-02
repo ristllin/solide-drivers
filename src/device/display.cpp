@@ -344,6 +344,7 @@ static void enqueue(RType t, const String* a, const String* b, int16_t extra = 0
 namespace solide::display {
 
 bool begin() {
+  if (rq) return true;   // idempotent — a second call is a safe no-op (queue exists)
   // Bind the dedicated HSPI/SPI3 bus BEFORE the first init(). MISO is unused (-1):
   // the panel is write-only.
   epdSPI.begin(EPD_SCK, -1 /*MISO*/, EPD_MOSI, EPD_CS);
@@ -361,6 +362,8 @@ bool begin() {
   if (ok != pdPASS) {
     log_e("display: task create FAILED heap=%u max8=%u", ESP.getFreeHeap(),
           heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    vQueueDelete(rq);   // no consumer task — free the queue so enqueue() no-ops
+    rq = nullptr;
     return false;
   }
   return true;

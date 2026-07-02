@@ -37,7 +37,11 @@ bool parseHeader(const uint8_t* b, size_t n, WavInfo& out) {
       haveData = true;
       break;                                         // data reached
     }
-    off = body + sz + (sz & 1);                      // chunks are word-aligned
+    // Advance in 64-bit so a file-controlled `sz` can't wrap `size_t` (32-bit on
+    // the device) and loop forever; require forward progress + stay in-buffer.
+    uint64_t next = (uint64_t)body + sz + (sz & 1);  // chunks are word-aligned
+    if (next <= off || next > n) break;
+    off = (size_t)next;
   }
   if (!haveFmt || !haveData) return false;
   out = info;

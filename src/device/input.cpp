@@ -37,6 +37,7 @@ static void task(void*) {
 }
 
 bool begin() {
+  if (q) return true;        // idempotent — a second call is a safe no-op
   pinMode(ENC_A, INPUT_PULLUP);
   pinMode(ENC_B, INPUT_PULLUP);
   pinMode(ENC_SW, INPUT_PULLUP);
