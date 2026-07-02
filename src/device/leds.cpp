@@ -1,5 +1,6 @@
 #include "solide/leds.h"
 #include <Adafruit_NeoPixel.h>
+#include <cstring>
 #include "esp_heap_caps.h"
 #include "solide/boards/board_solide_s3.h"
 
@@ -40,6 +41,15 @@ static volatile bool    g_taskAlive = false;
 static ring::Allocator  g_alloc;
 static portMUX_TYPE     g_mux = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t     g_task = nullptr;   // for stack high-water diagnostics
+
+// Raw-frame state (leds::showFrame / clearFrame — see leds.h "Three layers").
+// g_rawBuf is fixed at LED_COUNT; unused tail slots (count < LED_COUNT) are
+// kept zeroed so a short frame reads as "off" there, never stale data. Guarded
+// by g_mux like every other cross-task field here — same convention, not a
+// second lock.
+static bool     g_rawActive  = false;
+static uint32_t g_rawLastMs  = 0;
+static ring::RGB g_rawBuf[LED_COUNT] = {};
 
 // Animation tuning.
 static constexpr uint16_t BREATHE_MS   = 2600;  // idle / HITL breathe period
@@ -191,19 +201,39 @@ static void renderAgents(uint32_t t, const ring::Slot* slots, int n) {
   for (int i = 0; i < m; i++) renderSeg(spans[i].start, spans[i].len, slots[i], t);
 }
 
+// Raw-frame layer: push the caller's buffer through the same brightness cap as
+// every other layer (setBrightness is a display-wide setting, not baked into
+// the caller's pixels) so leds::setBrightness() still governs raw frames too.
+static void renderRaw(const ring::RGB* buf) {
+  g_ring.setBrightness(g_bright);
+  for (int i = 0; i < LED_COUNT; i++)
+    g_ring.setPixelColor(i, g_ring.Color(buf[i].r, buf[i].g, buf[i].b));
+}
+
 // ---- render task ------------------------------------------------------------
 
 static void task(void*) {
   g_taskAlive = true;
   ring::Slot snap[RING_MAX_SEGMENTS];
+  ring::RGB  rawSnap[LED_COUNT];
   for (;;) {
     uint32_t t = millis();
+
     portENTER_CRITICAL(&g_mux);
+    bool raw = g_rawActive;
+    if (raw && (t - g_rawLastMs > LED_FRAME_STALE_MS)) {
+      // Caller stopped feeding frames — never freeze on stale pixels forever.
+      // Hand control back to the layers below, same as an explicit clearFrame().
+      g_rawActive = false;
+      raw = false;
+    }
+    if (raw) memcpy(rawSnap, g_rawBuf, sizeof(rawSnap));
     int n = g_alloc.snapshot(snap, RING_MAX_SEGMENTS);
     portEXIT_CRITICAL(&g_mux);
 
-    if (n > 0) renderAgents(t, snap, n);
-    else       renderSingle(t);
+    if (raw)       renderRaw(rawSnap);
+    else if (n > 0) renderAgents(t, snap, n);
+    else            renderSingle(t);
     g_ring.show();
     vTaskDelay(pdMS_TO_TICKS(LED_FRAME_MS));
   }
@@ -297,6 +327,25 @@ int agentCount() {
   return n;
 }
 
+// ---- raw frame ---------------------------------------------------------------
+
+void showFrame(const ring::RGB* pixels, size_t count) {
+  size_t n = count < (size_t)LED_COUNT ? count : (size_t)LED_COUNT;   // clamp, never reject
+  portENTER_CRITICAL(&g_mux);
+  if (n > 0) memcpy(g_rawBuf, pixels, n * sizeof(ring::RGB));
+  if (n < (size_t)LED_COUNT)
+    memset(g_rawBuf + n, 0, (LED_COUNT - n) * sizeof(ring::RGB));     // tail -> off, not stale
+  g_rawActive = true;
+  g_rawLastMs = millis();
+  portEXIT_CRITICAL(&g_mux);
+}
+
+void clearFrame() {
+  portENTER_CRITICAL(&g_mux);
+  g_rawActive = false;
+  portEXIT_CRITICAL(&g_mux);
+}
+
 // ---- debug / self-test ------------------------------------------------------
 
 const char* patternName(Pattern p) {
@@ -321,6 +370,7 @@ State currentState() {
   s.taskAlive = g_taskAlive;
   portENTER_CRITICAL(&g_mux);
   s.segCount  = g_alloc.count();
+  s.rawFrame  = g_rawActive;
   portEXIT_CRITICAL(&g_mux);
   return s;
 }
