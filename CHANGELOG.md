@@ -3,7 +3,12 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
-## [0.1.0-dev] — unreleased
+## [0.1.0] — 2026-07-02
+
+First consumable release — the full hardware layer for the Solide S3, on the modern
+Arduino-ESP32 3.3.9 / IDF 5.5.4 toolchain. All drivers ported + validated (audio mic
+capture pending a hardware check); 48 host tests + an on-device self-test protocol +
+a device pytest harness; documented for humans and agents.
 
 ### Added
 - Repo scaffold: `library.json`, `platformio.ini` (`native` + `smoke` envs),
@@ -45,3 +50,26 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   reads a constant `-30935` = "no data on the data line" per ESP-IDF #12382 — a **mic
   hardware issue** (the original build never capture-validated the mic), not the driver.
   The acoustic loopback (M4) is gated on the mic delivering data. `examples/07_audio_play_record`.
+- **M4 — acoustic loopback (code done):** `audio::loopbackSelfTest()` plays a tone on a
+  concurrent TX task while reading the PDM RX (full-duplex), Goertzel-detects it, wired
+  into `TEST audio`. Code-path validated (no crash, heap flat); acoustic PASS + threshold
+  tuning pending the 5 V amp + a working mic.
+- **M5 — device harness + CI (done):** `tools/device_harness.py` (serial-only) +
+  `test_device/` pytest (drives the `TEST` protocol; 8/8 pass) + `tools/solide_console.py`
+  recorder + `.github/workflows/native-tests.yml` (CI runs `pio test -e native`). The
+  harness caught a real firmware crash (a concurrent `i2s_new_channel` race in the
+  loopback), since fixed.
+- **M6 — examples + docs + manifest (done):** examples 02/03/04/05/06/07/08 (one per
+  peripheral + a combined demo, all compile); `docs/` (hardware, architecture,
+  getting-started, testing, modernization, peripherals/*); `docs/manifest.json` +
+  `tools/gen_manifest.py` (pins parsed from the board header); `AGENTS.md`.
+- **Pre-release hardening:** adversarial review + verify pass — fixed a WAV
+  chunk-size overflow (device hang on a crafted header), a display queue leak on
+  task-create failure, non-idempotent `begin()`, and self-test residue; added a
+  regression test. 48 host tests + 8 device tests green.
+
+### Known
+- **Mic capture** reads a constant `-30935` = no data on the PDM DATA line (ESP-IDF
+  #12382) — a mic hardware/wiring issue to check (GPIO16 DATA / GPIO15 CLK / module).
+  The RX driver is correct and will capture once the mic delivers data.
+- LED lighting, speaker audibility, and the acoustic loopback need the **5 V bus** powered.
