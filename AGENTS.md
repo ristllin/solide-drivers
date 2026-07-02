@@ -51,6 +51,16 @@ INFO          -> INFO board=... psramMB=... heap=... uptime=...
 - Validate on hardware, don't eyeball — the `RESULT ... PASS` lines and refresh timings
   are the evidence.
 
+## Versioning
+
+Every meaningful change: bump `"version"` in `library.json`, add a
+`CHANGELOG.md` entry describing it, and tag the commit — `git tag -a vX.Y.Z -m
+"..."` — so a consumer (Nimbus or otherwise) can pin `lib_deps` to a specific
+tag instead of tracking `main`. Semver-for-0.x: MAJOR stays `0` pre-1.0;
+MINOR bumps for a new/changed public API (breaking or not); PATCH for a
+fix/internal change with no API surface change. One release can bundle
+multiple logical commits under one bump — just say so in the CHANGELOG entry.
+
 ## Known hardware caveats
 
 - LED ring + audio amp need the **5 V** bus; everything else runs on 3.3 V.

@@ -3,6 +3,44 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.2.0] — 2026-07-02
+
+One release, two independent changes bundled together (see "Versioning" in
+AGENTS.md): a new public API is a MINOR bump under semver-for-0.x even though
+the audio change alone would only be a PATCH-level fix — bumping once for both
+keeps the tag/version 1:1 with what actually shipped.
+
+### Added
+- **`solide::leds::showFrame(const ring::RGB*, size_t)` + `clearFrame()`** — a
+  third LED render layer (raw per-pixel frame) alongside the existing single-
+  ring Pattern and agent-status segment layers, for a caller with its own
+  animation engine. Unblocks Nimbus's host-tested `nimbus::ring::Animator`
+  (`lib/core/ring_animator.h`), which was built against this exact API name
+  and shape but shipped dark pending this upstream addition (see Nimbus's
+  `docs/led-ux.md`). Design (full reasoning in `include/solide/leds.h`):
+  showFrame() is the highest-precedence layer and takes over on its first
+  call without requiring the caller to first clear Pattern/agent state;
+  release is explicit via `clearFrame()` (mirrors `off()`); a caller that
+  stops pushing frames (crash/deadlock) auto-releases raw-frame mode after
+  `LED_FRAME_STALE_MS` (500 ms) so the ring can't freeze on stale pixels
+  forever; a `count` that doesn't match the board's LED count is clamped,
+  never rejected (short frames leave the tail off, long frames drop the
+  extra pixels). `leds::State` gains a `rawFrame` flag for self-test/debug
+  visibility, alongside the existing `segCount`/`taskAlive`.
+- **Audio self-test diagnostics** to bisect the open PDM-mic capture bug
+  (see "Known" below): `audio::loopbackSelfTest()` now reports an `LbDiag`
+  (tone magnitude, an off-tone control-band magnitude, RMS, peak, DC mean,
+  sample count) instead of a bare pass/fail, so a `TEST audio` SKIP comes
+  with an actionable reason (`MIC-DEAD` / `SPEAKER-OR-COUPLING` / below
+  detection floor) instead of one aggregate number. Two new manual test
+  console commands split the loopback in half: `TEST spk` (audible tone,
+  no mic — confirms the amp/5V/speaker chain) and `TEST mic` (RMS monitor
+  that responds to tapping, no speaker — confirms the mic capture path).
+  Loudened the loopback test tone (0.24 -> 0.73 FS) for more detection
+  margin over PDM self-noise. Does **not** fix the underlying dead-line bug
+  (still open — needs the mic hardware in hand); this is diagnostic
+  instrumentation to make that bug bisectable on real hardware.
+
 ## [0.1.0] — 2026-07-02
 
 First consumable release — the full hardware layer for the Solide S3, on the modern
