@@ -6,6 +6,7 @@ A hardware-only board-support package for the **Solide S3** device
 
 - [getting-started.md](getting-started.md) — import into your firmware + a minimal sketch
 - [hardware.md](hardware.md) — pin map, power rails, refresh timings, caveats
+- [build.md](build.md) — build/assembly guide: BOM, module-by-module wiring, power, battery sense ([diagram](wiring.svg))
 - [architecture.md](architecture.md) — portable/device split, conventions, threading
 - [testing.md](testing.md) — native tests, the serial `TEST` protocol, device pytest
 - [modernization.md](modernization.md) — the Arduino-ESP32 3.x / IDF 5.x toolchain record

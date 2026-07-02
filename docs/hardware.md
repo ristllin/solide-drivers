@@ -2,7 +2,8 @@
 
 The canonical, machine-readable version is [`manifest.json`](manifest.json) (generated
 from `include/solide/boards/board_solide_s3.h`, the pin source of truth). This page is
-the human reference.
+the human reference; **[build.md](build.md)** is the module-by-module wiring +
+power + BOM assembly guide (with a [diagram](wiring.svg)).
 
 ## Board
 
@@ -49,9 +50,20 @@ won't light and the speaker won't drive audibly without the 5 V bus**.
 - E-paper 3-colour: **~18.5 s** (OTP waveform) — reserve for idle/art.
 - LED ring: ~60 FPS render loop; no per-show RMT heap leak on IDF5.
 
+## Battery sense (add-on)
+The device has no built-in battery gauge. To read pack charge, add a divider from
+the **2S pack** (6.0–8.4 V, *before* the DC-DC — the regulated 5 V stays flat and
+tells you nothing) into a free ADC1 pin:
+
+`BAT+ → 220 kΩ → node → 100 kΩ → GND`, and `node → GPIO 4 (ADC1)` (÷3.2, 8.4 V→~2.6 V,
+optional 100 nF to GND). Read `analogReadMilliVolts(4) × 3.2` = pack volts → rough SoC.
+Full wiring + code pointer in [build.md](build.md#battery-sense-add-on); a
+`solide::power` driver is the planned home once it's wired.
+
 ## Caveats worth repeating
 - **Audio board VCC is 3.3 V only.** The PDM mic DATA line follows VCC; 5 V will damage
   the S3's input.
+- **Battery sense reads the pack, not the 5 V rail** (the DC-DC output is regulated flat).
 - **Octal PSRAM occupies GPIO 33–37.** Never route a peripheral there.
 - The base board def (`esp32-s3-devkitc-1`) advertises "N8, no PSRAM"; the N16R8 is
   driven by `board_build.arduino.memory_type=qio_opi` + `-DBOARD_HAS_PSRAM` (see
