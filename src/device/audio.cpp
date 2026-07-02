@@ -260,7 +260,7 @@ static void lbPlayTask(void* p) {
   vTaskDelete(nullptr);
 }
 
-bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut) {
+bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDiag* diagOut) {
   static volatile bool s_busy = false;
   if (s_busy) return false;                  // not re-entrant
   s_busy = true;
@@ -275,13 +275,17 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut) {
     s_busy = false;
     return false;
   }
+  // Amplitude ~0.73 FS (24000/32767): drive the amp near-loud for maximum acoustic
+  // SPL and detection margin. The proven Nuage build used a similar peak for beeps;
+  // 8000 (0.24 FS) left too little headroom over the PDM mic's broadband self-noise.
   for (size_t i = 0; i < n; i++)
-    tone[i] = (int16_t)(8000.0f * sinf(2.0f * (float)M_PI * toneHz * (float)i / (float)rate));
+    tone[i] = (int16_t)(24000.0f * sinf(2.0f * (float)M_PI * toneHz * (float)i / (float)rate));
 
   // Open BOTH channels here, sequentially (no concurrent i2s_new_channel). The
   // play task then only writes TX while this task reads RX — real full duplex.
   bool ok = false;
   float mag = 0.0f; uint16_t rr = 0;
+  float ctrlMag = 0.0f; uint16_t pk = 0; int32_t mean = 0; size_t captured = 0;
   if (micInit() && spkOpen(rate)) {
     micSettle();
     static LbCtx ctx;
@@ -296,9 +300,22 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut) {
     }
     uint32_t guard = millis();
     while (!ctx.done && millis() - guard < 500) delay(5);   // let the play task finish
+    captured = got;
     mag = tone::goertzel(rec, got, rate, toneHz);
     rr  = tone::rms(rec, got);
-    ok  = mag > 1000.0f;                     // detection threshold — tune on hardware
+    // Control Goertzel at an off-tone frequency the speaker never plays. A real
+    // acoustic tone lifts mag >> ctrlMag; broadband mic hash/ambient lifts BOTH
+    // equally (so mag/ctrlMag ~ 1). This ratio separates "speaker plays a real
+    // tone" from "mic just hears noise" independently of the absolute level.
+    ctrlMag = tone::goertzel(rec, got, rate, (float)toneHz + 2100.0f);
+    pk = tone::peak(rec, got);
+    // DC mean: a large non-zero mean means the HP filter isn't running / a stuck
+    // DATA line (contrast the old constant -30935 dead-line signature).
+    int64_t acc = 0; for (size_t i = 0; i < got; i++) acc += rec[i];
+    mean = got ? (int32_t)(acc / (int64_t)got) : 0;
+    // Detect on BOTH an absolute floor AND a tone-vs-control ratio, so a hot but
+    // tuneless capture (mag high only because everything is high) does not pass.
+    ok = mag > 1000.0f && mag > 2.0f * ctrlMag;
   }
   spkClose();
   micDeinit();
@@ -306,6 +323,14 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut) {
   heap_caps_free(rec);
   if (magOut) *magOut = (uint32_t)mag;
   if (rmsOut) *rmsOut = rr;
+  if (diagOut) {
+    diagOut->toneMag  = (uint32_t)mag;
+    diagOut->ctrlMag  = (uint32_t)ctrlMag;
+    diagOut->rms      = rr;
+    diagOut->peak     = pk;
+    diagOut->dcMean   = mean;
+    diagOut->samples  = (uint32_t)captured;
+  }
   s_busy = false;
   return ok;
 }

@@ -33,7 +33,30 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
 // PDM-RX on I2S0 run concurrently), then Goertzel-detects the tone in the capture.
 // Returns true if the tone is present. `magOut`/`rmsOut` (optional) report the
 // measured tone magnitude and record RMS. NEEDS the 5 V amp bus + a working mic.
-bool loopbackSelfTest(uint16_t toneHz = 1000, uint32_t* magOut = nullptr, uint16_t* rmsOut = nullptr);
+//
+// Diagnostics that separate the failure modes on hardware (all optional via
+// `diagOut`):
+//   toneMag  Goertzel @ toneHz         — the loopback tone energy
+//   ctrlMag  Goertzel @ toneHz+2100 Hz — control band the speaker never plays;
+//            a REAL tone gives toneMag >> ctrlMag, broadband hash/ambient gives
+//            toneMag ~= ctrlMag (so ratio ~1 == "mic hears noise, not the tone")
+//   rms      overall level (mic alive vs silent)
+//   peak     peak abs sample (0..32767; ~0 == mic delivering no data)
+//   dcMean   mean sample (large |mean| == HP off / stuck DATA line)
+//   samples  samples actually captured
+// Interpretation: toneMag>1000 AND toneMag>2*ctrlMag => tone reproduced (PASS).
+//   rms high but toneMag~=ctrlMag => mic works, speaker NOT radiating the tone
+//   (amp/5 V/acoustic coupling). rms~=0 / peak~=0 => mic delivering no data.
+struct LbDiag {
+  uint32_t toneMag;
+  uint32_t ctrlMag;
+  uint16_t rms;
+  uint16_t peak;
+  int32_t  dcMean;
+  uint32_t samples;
+};
+bool loopbackSelfTest(uint16_t toneHz = 1000, uint32_t* magOut = nullptr,
+                      uint16_t* rmsOut = nullptr, LbDiag* diagOut = nullptr);
 
 constexpr uint32_t kMicSampleRate    = 16000;
 constexpr uint8_t  kMicBitsPerSample = 16;

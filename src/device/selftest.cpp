@@ -5,7 +5,9 @@
 #include "solide/memory.h"
 #include "solide/input.h"
 #include "solide/audio.h"
+#include "solide/tone.h"
 #include <Arduino.h>
+#include <math.h>
 
 namespace solide::selftest {
 
@@ -55,12 +57,70 @@ static bool testAudio() {
   // Acoustic loopback: play a tone on the speaker, detect it on the mic. Needs
   // the 5 V amp bus + a working mic; a no-detection result is reported SKIP (like
   // an absent optional peripheral), not FAIL, so it doesn't fail the suite.
-  uint32_t mag = 0; uint16_t rms = 0;
-  bool detected = audio::loopbackSelfTest(1000, &mag, &rms);
-  Serial.printf("RESULT audio %s toneHz=1000 mag=%u rms=%u%s\n",
-                detected ? "PASS" : "SKIP", (unsigned)mag, rms,
-                detected ? "" : " (no tone; needs 5V amp + working mic)");
+  //
+  // The diagnostics separate the three failure modes so a SKIP is actionable:
+  //   MIC-DEAD    : peak ~= 0 (or |dcMean| huge)   -> no PDM data on GPIO16
+  //   SPEAKER/COUP: rms high but tone ~= control   -> mic hears noise, no tone
+  //                 (5 V amp not reaching the speaker, or no acoustic coupling)
+  //   PASS        : tone >> control and above floor -> tone reproduced & heard
+  audio::LbDiag d{};
+  bool detected = audio::loopbackSelfTest(1000, nullptr, nullptr, &d);
+  const char* reason = "";
+  if (!detected) {
+    if (d.peak < 200 || (d.dcMean > 20000 || d.dcMean < -20000))
+      reason = " (MIC-DEAD: no PDM data on din — check GPIO16 DATA / GPIO15 CLK / mic module)";
+    else if (d.toneMag <= 2 * d.ctrlMag)
+      reason = " (SPEAKER/COUPLING: mic hears broadband noise but no 1kHz tone — check 5V amp bus reaches the speaker + acoustic path)";
+    else
+      reason = " (tone present but below detection floor — raise SPL or lower threshold)";
+  }
+  Serial.printf("RESULT audio %s toneHz=1000 mag=%u ctrl=%u rms=%u peak=%u dcMean=%ld samples=%u%s\n",
+                detected ? "PASS" : "SKIP", (unsigned)d.toneMag, (unsigned)d.ctrlMag,
+                d.rms, d.peak, (long)d.dcMean, (unsigned)d.samples, reason);
   return true;
+}
+
+// Speaker-only: play an audible 1 kHz tone at high amplitude for ~1.2 s. No mic
+// involved — a HUMAN confirms whether the amp/5 V/speaker chain makes sound. This
+// bisects the loopback: if you hear this but `TEST audio` still SKIPs, the fault is
+// mic capture or acoustic coupling, not the speaker.
+static bool testSpk() {
+  const int rate = 16000, freq = 1000, n = rate * 1200 / 1000;
+  int16_t* buf = (int16_t*)malloc(n * sizeof(int16_t));
+  if (!buf) { Serial.println("RESULT spk FAIL alloc"); return false; }
+  for (int i = 0; i < n; i++)
+    buf[i] = (int16_t)(24000.0f * sinf(2.0f * (float)PI * freq * i / rate));
+  bool played = audio::playPcm(buf, n, rate);
+  free(buf);
+  Serial.printf("RESULT spk %s toneHz=1000 durMs=1200 amp=24000 (LISTEN: you should hear a 1kHz tone; silence => amp/5V/speaker fault)\n",
+                played ? "PASS" : "FAIL");
+  return played;
+}
+
+// Mic-only: record ~2 s and stream the RMS so a human can TAP the mic and watch the
+// number jump. No speaker involved. peak~=0 or a huge constant dcMean => no PDM data
+// (check GPIO16 DATA / GPIO15 CLK / the mic module); a resting rms that RESPONDS to
+// tapping => the mic is alive and the earlier dead-line fault is resolved.
+static bool testMic() {
+  const size_t N = 3200;   // 0.2 s @ 16 kHz per window
+  int16_t* buf = (int16_t*)malloc(N * sizeof(int16_t));
+  if (!buf) { Serial.println("RESULT mic FAIL alloc"); return false; }
+  Serial.println("mic monitor: tap the mic — RMS should jump (2 s)...");
+  uint16_t maxPeak = 0; uint32_t t0 = millis();
+  while (millis() - t0 < 2000) {
+    size_t got = audio::recordToBuffer(buf, N, 250, nullptr);
+    if (!got) continue;
+    uint16_t r = tone::rms(buf, got), p = tone::peak(buf, got);
+    int64_t acc = 0; for (size_t i = 0; i < got; i++) acc += buf[i];
+    long mean = got ? (long)(acc / (int64_t)got) : 0;
+    if (p > maxPeak) maxPeak = p;
+    Serial.printf("  mic rms=%u peak=%u dcMean=%ld samples=%u\n", r, p, mean, (unsigned)got);
+  }
+  bool alive = maxPeak > 200;
+  Serial.printf("RESULT mic %s maxPeak=%u (alive => tapping moved it; ~0 => no PDM data on din)\n",
+                alive ? "PASS" : "FAIL", maxPeak);
+  free(buf);
+  return alive;
 }
 
 bool run(const char* name) {
@@ -71,6 +131,8 @@ bool run(const char* name) {
   if (n == "memory")                 return testMemory();
   if (n == "input" || n == "enc")    return testInput();
   if (n == "audio")                  return testAudio();
+  if (n == "spk"  || n == "speaker") return testSpk();
+  if (n == "mic")                    return testMic();
   if (n == "all") {
     int pass = 0, total = 0;
     pass += testLed();    total++;
