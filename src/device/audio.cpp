@@ -248,40 +248,66 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
 // caller records. NOTE: unvalidated as of the initial build — needs the 5 V amp
 // bus + a working mic; the detection threshold is a starting point to tune on
 // real hardware.
-struct LbCtx { const int16_t* tone; size_t n; uint32_t rate; volatile bool done; };
+// The play task only WRITES to an already-open TX channel — it never allocates a
+// channel, so it can't race the RX allocation. Both channels are opened (and
+// closed) sequentially by the caller below.
+struct LbCtx { const int16_t* tone; size_t n; volatile bool done; };
 
 static void lbPlayTask(void* p) {
   LbCtx* c = (LbCtx*)p;
-  playPcm(c->tone, c->n, c->rate);
+  spkWrite(c->tone, c->n);
   c->done = true;
   vTaskDelete(nullptr);
 }
 
 bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut) {
+  static volatile bool s_busy = false;
+  if (s_busy) return false;                  // not re-entrant
+  s_busy = true;
+
   const uint32_t rate = 16000;
   const size_t   n    = rate * 400 / 1000;   // 400 ms tone + capture window
   int16_t* tone = (int16_t*)heap_caps_malloc(n * sizeof(int16_t), MALLOC_CAP_SPIRAM);
   int16_t* rec  = (int16_t*)heap_caps_malloc(n * sizeof(int16_t), MALLOC_CAP_SPIRAM);
-  if (!tone || !rec) { if (tone) heap_caps_free(tone); if (rec) heap_caps_free(rec); return false; }
+  if (!tone || !rec) {
+    if (tone) heap_caps_free(tone);
+    if (rec) heap_caps_free(rec);
+    s_busy = false;
+    return false;
+  }
   for (size_t i = 0; i < n; i++)
     tone[i] = (int16_t)(8000.0f * sinf(2.0f * (float)M_PI * toneHz * (float)i / (float)rate));
 
-  static LbCtx ctx;                          // static: outlives this frame for the play task
-  ctx.tone = tone; ctx.n = n; ctx.rate = rate; ctx.done = false;
-  TaskHandle_t th = nullptr;
-  xTaskCreatePinnedToCore(lbPlayTask, "lbplay", 4096, &ctx, 1, &th, 0);
-
-  size_t got = recordToBuffer(rec, n, 700, nullptr);      // records while the tone plays
-  uint32_t guard = millis();
-  while (!ctx.done && millis() - guard < 500) delay(5);    // let the play task finish
-
-  float mag = tone::goertzel(rec, got, rate, toneHz);
-  uint16_t r = tone::rms(rec, got);
-  if (magOut) *magOut = (uint32_t)mag;
-  if (rmsOut) *rmsOut = r;
+  // Open BOTH channels here, sequentially (no concurrent i2s_new_channel). The
+  // play task then only writes TX while this task reads RX — real full duplex.
+  bool ok = false;
+  float mag = 0.0f; uint16_t rr = 0;
+  if (micInit() && spkOpen(rate)) {
+    micSettle();
+    static LbCtx ctx;
+    ctx.tone = tone; ctx.n = n; ctx.done = false;
+    TaskHandle_t th = nullptr;
+    xTaskCreatePinnedToCore(lbPlayTask, "lbplay", 4096, &ctx, 1, &th, 0);
+    size_t got = 0; uint32_t t0 = millis();
+    while (got < n && millis() - t0 < 700) {
+      size_t r = 0;
+      if (i2s_channel_read(g_rx, rec + got, (n - got) * sizeof(int16_t), &r, 100) == ESP_OK)
+        got += r / sizeof(int16_t);
+    }
+    uint32_t guard = millis();
+    while (!ctx.done && millis() - guard < 500) delay(5);   // let the play task finish
+    mag = tone::goertzel(rec, got, rate, toneHz);
+    rr  = tone::rms(rec, got);
+    ok  = mag > 1000.0f;                     // detection threshold — tune on hardware
+  }
+  spkClose();
+  micDeinit();
   heap_caps_free(tone);
   heap_caps_free(rec);
-  return mag > 1000.0f;                       // detection threshold — tune on hardware
+  if (magOut) *magOut = (uint32_t)mag;
+  if (rmsOut) *rmsOut = rr;
+  s_busy = false;
+  return ok;
 }
 
 // ---- lifecycle ---------------------------------------------------------------

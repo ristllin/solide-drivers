@@ -1,0 +1,3 @@
+# Host-side tooling for solide-drivers (device harness + console recorder + tests).
+pyserial>=3.5
+pytest>=7.0

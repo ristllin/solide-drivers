@@ -1,0 +1,22 @@
+name: native-tests
+
+# Host unit tests for the portable core (solide::ring / input / menu / wav / tone).
+# No hardware — runs on every push/PR. Device tests (test_device/) run on the lab
+# machine with the board attached, not in CI.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Run native unit tests
+        run: pio test -e native
