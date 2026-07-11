@@ -30,6 +30,14 @@ static i2s_chan_handle_t g_rx = nullptr;
 static bool     s_spkOpen   = false;
 static uint8_t  s_carry     = 0;
 static bool     s_haveCarry = false;
+// Master playback gain as fixed-point Q8 (256 == unity). Default 0.5: the amp +
+// small speaker overdrive well before full scale. Integer scale in the hot loop
+// (S3 has an FPU but this stays cheap + exact); gain <= 256 so mono[i]*g >> 8
+// can never overflow int32 or exceed int16 range — no clamp needed.
+static int32_t  s_vol256    = 128;
+
+void  setVolume(float v) { s_vol256 = (int32_t)((v < 0.f ? 0.f : v > 1.f ? 1.f : v) * 256.f + 0.5f); }
+float getVolume()        { return (float)s_vol256 / 256.f; }
 
 // ---- speaker (TX / i2s_std) --------------------------------------------------
 
@@ -81,7 +89,10 @@ static void spkWrite(const int16_t* mono, size_t n) {
   size_t i = 0;
   while (i < n) {
     size_t m = 0;
-    while (i < n && m < 256) { st[m * 2] = mono[i]; st[m * 2 + 1] = mono[i]; m++; i++; }
+    while (i < n && m < 256) {
+      const int16_t v = (int16_t)(((int32_t)mono[i] * s_vol256) >> 8);   // master volume
+      st[m * 2] = v; st[m * 2 + 1] = v; m++; i++;
+    }
     const uint8_t* p = (const uint8_t*)st;
     size_t left = m * 4;
     while (left) {
@@ -295,6 +306,7 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
   bool ok = false;
   float mag = 0.0f; uint16_t rr = 0;
   float ctrlMag = 0.0f; uint16_t pk = 0; int32_t mean = 0; size_t captured = 0;
+  const int32_t savedVol = s_vol256; s_vol256 = 256;   // force full-scale tone for detection margin
   if (micInit() && spkOpen(rate)) {
     micSettle();
     static LbCtx ctx;
@@ -328,6 +340,7 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
   }
   spkClose();
   micDeinit();
+  s_vol256 = savedVol;   // restore master volume
   heap_caps_free(tone);
   heap_caps_free(rec);
   if (magOut) *magOut = (uint32_t)mag;

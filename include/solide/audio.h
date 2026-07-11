@@ -20,6 +20,14 @@ void end();      // release both channels
 // ---- speaker (I2S TX; mono 16-bit duplicated to L+R for the stereo amp) ----
 bool playPcm(const int16_t* mono, size_t sampleCount, uint32_t sampleRate);
 bool playWavFile(fs::FS& fs, const char* path);        // canonical 16-bit mono PCM WAV
+
+// Master playback attenuation (0.0..1.0), applied to EVERY speaker output (SFX,
+// TTS, beep — they all funnel through the mono->stereo write). The MAX98357A's
+// fixed ~9 dB gain overdrives a small speaker at full scale, so full-scale WAVs
+// (e.g. game voice rips) clip/distort; keep this below 1.0. Persists until
+// changed; the acoustic loopback self-test forces full scale internally.
+void  setVolume(float v);
+float getVolume();
 bool spkOpen(uint32_t sampleRate);                      // streaming: open at rate (clamped [8k,48k])
 void spkFeedBytes(const uint8_t* pcmLe16, size_t n);    // feed LE 16-bit mono chunks
 void spkClose();                                        // flush + close
