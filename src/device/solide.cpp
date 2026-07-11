@@ -9,6 +9,7 @@ BeginResult begin() {
   r.display = display::begin();
   r.leds    = leds::begin();
   r.input   = input::begin();
+  r.battery = battery::begin();  // false = divider not fitted (benign)
   return r;
 }
 

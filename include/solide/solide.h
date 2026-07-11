@@ -7,13 +7,14 @@
 #include "solide/storage.h"
 #include "solide/memory.h"
 #include "solide/input.h"
+#include "solide/battery.h"
 #include "solide/menu.h"
 #include "solide/selftest.h"
 #include "solide/status_art.h"
 
 namespace solide {
 
-struct BeginResult { bool display, leds, storage, memory, input; };
+struct BeginResult { bool display, leds, storage, memory, input, battery; };
 
 // Bring up all peripherals. Each is independent — a failure of one does not stop
 // the others; the returned mask reports which came up. Consumers that don't have

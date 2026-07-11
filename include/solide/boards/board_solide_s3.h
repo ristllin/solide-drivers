@@ -26,6 +26,8 @@ inline constexpr Board kBoardSolideS3 = {
   /* enc */ { /*a*/ 1, /*b*/ 2, /*sw*/ 48 },
   /* spk */ { /*bclk*/ 7, /*lrclk*/ 8, /*din*/ 17 },
   /* mic */ { /*bclk*/ 15, /*ws*/ 18, /*din*/ 16 },   // I2S std: INMP441/ICS-43434 (SCK=15, WS=18, SD=16, L/R->GND)
+  // BAT+ -[220k]- GPIO4 -[100k]- GND (÷3.2), tapped before the DC-DC; 2S pack.
+  /* batt */ { /*sense*/ 4, /*dividerX100*/ 320, /*cells*/ 2 },
 };
 
 }  // namespace solide

@@ -21,6 +21,11 @@ struct Board {
   struct { int8_t a, b, sw; }                   enc;   // EC11 quadrature + switch
   struct { int8_t bclk, lrclk, din; }           spk;   // I2S TX (speaker amp)
   struct { int8_t bclk, ws, din; }              mic;   // I2S std RX (INMP441/ICS-43434)
+  // Battery voltage sense: an ADC1 pin fed by a resistor divider from BAT+
+  // (tapped BEFORE the DC-DC). dividerX100 = (Rtop+Rbot)/Rbot × 100 (320 = ÷3.2);
+  // cells = series Li-ion count (pack mV ÷ cells = per-cell mV). sense = -1
+  // when the divider isn't fitted — battery::begin() then reports absent.
+  struct { int8_t sense; uint16_t dividerX100; uint8_t cells; } batt;
 };
 
 // The active board, selected at build time via -DSOLIDE_BOARD=<id> (default: solide_s3).

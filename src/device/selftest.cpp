@@ -1,4 +1,6 @@
 #include "solide/selftest.h"
+#include "solide/battery.h"
+#include "solide/board.h"
 #include "solide/leds.h"
 #include "solide/display.h"
 #include "solide/storage.h"
@@ -123,6 +125,21 @@ static bool testMic() {
   return alive;
 }
 
+// Battery divider: PASS = fitted + plausible per-cell voltage. SKIP (PASS-with-
+// note) when the divider isn't fitted — an unfitted sense line is a valid build.
+static bool testBatt() {
+  if (!battery::present()) {
+    Serial.println("RESULT batt SKIP fitted=0 (no divider on batt.sense, or implausible read)");
+    return true;
+  }
+  const uint16_t pack = battery::packMv();
+  const uint16_t cell = battery::cellMv();
+  const bool ok = cell >= 2500 && cell <= 4400;
+  Serial.printf("RESULT batt %s packMv=%u cellMv=%u cells=%u\n",
+                ok ? "PASS" : "FAIL", pack, cell, (unsigned)board().batt.cells);
+  return ok;
+}
+
 bool run(const char* name) {
   String n(name); n.trim();
   if (n == "led")                    return testLed();
@@ -133,6 +150,7 @@ bool run(const char* name) {
   if (n == "audio")                  return testAudio();
   if (n == "spk"  || n == "speaker") return testSpk();
   if (n == "mic")                    return testMic();
+  if (n == "batt" || n == "battery") return testBatt();
   if (n == "all") {
     int pass = 0, total = 0;
     pass += testLed();    total++;
@@ -141,6 +159,7 @@ bool run(const char* name) {
     pass += testMemory(); total++;
     pass += testInput();  total++;
     pass += testAudio();  total++;
+    pass += testBatt();   total++;
     Serial.printf("RESULT all %s (%d/%d)\n", pass == total ? "PASS" : "FAIL", pass, total);
     return pass == total;
   }
