@@ -13,7 +13,8 @@ this page has the **module-by-module wiring + power + assembly**. Overview diagr
 | 1 | **ESP32-S3-DevKitC-1 N16R8** | 16 MB flash / 8 MB octal PSRAM. The brain. |
 | 1 | **WeAct 2.9" 3-colour e-paper** (SSD1680) | B/W + red, 296×128 |
 | 1 | **WS2812B LED ring, 45 px** | addressable RGB |
-| 1 | **Combined audio board** | I2S amp (NS4168) + PDM MEMS mic on one board |
+| 1 | **MAX98357A I2S amp** | I2S Class-D amp (built-in thermal + over-current protection) |
+| 1 | **INMP441 / ICS-43434 I2S MEMS mic** | I2S-std MEMS microphone (separate breakout) |
 | 1 | **EC11 rotary encoder** with push switch | 3-pin + 2-pin |
 | 1 | **microSD module** (SPI) + FAT32 card | |
 | 2 | **18650 Li-ion cells** | wired in **series** = 2S |
@@ -30,7 +31,7 @@ USB-C ─▶ 2S BMS ─▶ 2×18650 (series, ~6.0–8.4 V) ─▶ DC-DC ─▶ 5
         5 V bus ─┬─▶ LED ring (+5V)                           │
                  ├─▶ ESP32-S3 VIN/5V ─▶ (on-board LDO) ─▶ 3.3 V rail
                  └─▶ (optional louder amp, see audio note)
-        3.3 V rail ─▶ e-paper · microSD · audio board VCC · encoder pull-ups
+        3.3 V rail ─▶ e-paper · microSD · mic + amp VCC · encoder pull-ups
 ```
 
 - **On battery:** the DC-DC 5 V bus feeds the ESP32's VIN; the DevKit's on-board
@@ -40,8 +41,8 @@ USB-C ─▶ 2S BMS ─▶ 2×18650 (series, ~6.0–8.4 V) ─▶ DC-DC ─▶ 5
 - **Every ground is common** — tie all GNDs together (cells, BMS, DC-DC, ESP32,
   every module).
 
-> ⚠️ **The audio board VCC is 3.3 V ONLY.** The PDM mic DATA line follows VCC, and
-> 5 V would damage the S3's input. Do **not** put the audio board on the 5 V bus.
+> ⚠️ **The mic VCC is 3.3 V ONLY.** The mic VDD/data lines follow VCC, and
+> 5 V would damage the S3's input. Do **not** put the mic on the 5 V bus.
 
 ## Wiring — module by module
 
@@ -91,16 +92,23 @@ WeAct silk is I²C-style but it is **SPI** (SDA=data, SCL=clock).
 
 (Internal pull-ups are enabled in the driver — no external resistors needed.)
 
-### Audio board (I2S speaker + PDM mic) — **3.3 V only**
-| Module pin | Role | → | ESP32 / rail |
-|---|---|---|---|
-| VCC | shared power | → | **3V3** ⚠ (never 5V) |
-| GND | shared ground | → | **GND** |
-| BCLK | spk bit clock | → | GPIO **7** |
-| LRCLK | spk word clock | → | GPIO **8** |
-| SDA / DIN | spk data in | → | GPIO **17** |
-| CLK | mic PDM clock | → | GPIO **15** |
-| DATA | mic PDM data | → | GPIO **16** |
+### Audio — MAX98357A I2S amp + INMP441/ICS-43434 I2S mic
+Two separate breakouts. The **mic VCC is 3.3 V only ⚠** (5 V damages the S3); the
+amp runs on 3.3 V as a status speaker (5 V bus for more volume).
+
+| Module | Pin | Role | → | ESP32 / rail |
+|---|---|---|---|---|
+| amp | VCC | power | → | **3V3** (5V bus for louder) |
+| amp | GND | ground | → | **GND** |
+| amp | BCLK | bit clock | → | GPIO **7** |
+| amp | LRCLK | word clock | → | GPIO **8** |
+| amp | DIN | data in | → | GPIO **17** |
+| mic | VDD | power | → | **3V3** ⚠ (never 5V) |
+| mic | GND | ground | → | **GND** |
+| mic | BCLK / SCK | bit clock | → | GPIO **15** |
+| mic | WS / LRCLK | word select | → | GPIO **18** |
+| mic | SD | data out | → | GPIO **16** |
+| mic | L/R | channel select | → | **GND** (left slot) |
 
 > The amp runs at reduced volume on 3.3 V (fine as a status speaker). If you need
 > more SPL, use a **separate** 5 V amp that does **not** share VCC with the mic.
@@ -122,8 +130,8 @@ BAT+ (2S pack +, before the DC-DC)
    │
   GND
 ```
-- **ADC pin:** GPIO **4** (free ADC1; GPIO 5 or 6 also work — avoid GPIO 18, that's
-  ADC2 and clashes with WiFi).
+- **ADC pin:** GPIO **4** (free ADC1; GPIO 5 or 6 also work — avoid GPIO 18, now the
+  I2S mic WS and also an ADC2 pin that clashes with WiFi).
 - **Divider:** 220 k / 100 k → ÷3.2, so 8.4 V → ~2.6 V. Quiescent draw ≈ 26 µA.
 - **Read:** `analogReadMilliVolts(4) × 3.2` = pack volts; map to a rough SoC
   (~8.4 V≈100 %, ~7.4 V≈50 %, ~6.4 V≈0 % — the Li-ion curve is flat mid-range and

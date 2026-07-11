@@ -59,11 +59,11 @@
   <rect class="mod" x="710" y="300" width="230" height="120" rx="8"/>
   <text x="722" y="322" class="tb">Audio board</text>
   <text x="722" y="342" class="pin">spk BCLK7 LRCLK8 DIN17</text>
-  <text x="722" y="360" class="pin">mic CLK15 DATA16</text>
+  <text x="722" y="360" class="pin">mic BCLK15 WS18 SD16</text>
   <text x="722" y="380" class="warn">VCC 3.3V ONLY — 5V kills the S3</text>
-  <text x="722" y="404" class="t" fill="#666">I2S TX + PDM RX</text>
+  <text x="722" y="404" class="t" fill="#666">I2S TX + I2S RX</text>
   <line x1="710" y1="360" x2="590" y2="375" stroke="#3b6ea5" stroke-width="2"/>
-  <text x="628" y="352" class="lbl" fill="#3b6ea5">I2S/PDM</text>
+  <text x="628" y="352" class="lbl" fill="#3b6ea5">I2S</text>
 
   <!-- Battery sense (bottom center) -->
   <rect class="mod" x="360" y="560" width="260" height="110" rx="8" stroke-dasharray="5 3"/>

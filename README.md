@@ -2,7 +2,7 @@
 
 A reusable **board-support package** for the **Solide S3** device — an
 ESP32-S3-DevKitC-1 **N16R8** (16 MB flash, 8 MB octal PSRAM) with an e-paper
-display, a 45-LED WS2812B ring, an I2S speaker + PDM mic, an SD card, and an EC11
+display, a 45-LED WS2812B ring, an I2S speaker + I2S mic, an SD card, and an EC11
 encoder. It extracts the proven drivers, hardware knowledge, and docs from the
 original firmware into a clean, documented, tested library so any firmware can
 program this hardware without reinventing the drivers.
@@ -15,7 +15,7 @@ program this hardware without reinventing the drivers.
 |---|---|---|
 | `solide::display` | WeAct 2.9" 3-colour e-paper (SSD1680) | fast 2-colour B/W (~2.2 s) + 3-colour (~18.5 s) |
 | `solide::leds` | WS2812B ring ×45 | patterns + agent-status segmentation + colour schemes, ~60 FPS |
-| `solide::audio` | I2S speaker + PDM mic | play/record, modern i2s_std/i2s_pdm |
+| `solide::audio` | I2S speaker + I2S mic | play/record, modern i2s_std (TX + RX) |
 | `solide::storage` | SD card (FAT32) | graceful file I/O |
 | `solide::memory` | NVS + SD | typed persistent settings/state |
 | `solide::input` | EC11 encoder + button | quadrature decode + `solide::menu` FSM |

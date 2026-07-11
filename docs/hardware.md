@@ -20,7 +20,7 @@ flash, **8 MB OCTAL (OPI) PSRAM**.
 | **33–37** | **OCTAL PSRAM — the N16R8 gotcha** |
 | 48 | on-board RGB (repurposed here as the encoder switch) |
 
-Free spares: **3, 4, 5, 6, 9, 18**.
+Free spares: **3, 4, 5, 6, 9**. (GPIO 18 is now the I2S mic WS/LRCLK — no longer spare.)
 
 ## Pin map
 
@@ -30,8 +30,8 @@ Free spares: **3, 4, 5, 6, 9, 18**.
 | **E-paper** WeAct 2.9" 3-colour (SSD1680) | HSPI/SPI3 | SCK 38 · MOSI 39 · CS 40 · DC 41 · RST 42 · BUSY 47 | 3.3 V | 4 MHz; MISO unused. WeAct labels SPI I2C-style: SDA=MOSI, SCL=SCK |
 | **LED ring** WS2812B ×45 | RMT | DIN 21 | **5 V** power, 3.3 V logic | ~372 mA worst case @ brightness 30 |
 | **Encoder** EC11 | GPIO | A 1 · B 2 · SW 48 | 3.3 V | 3-pin side: A / common→GND / B. 2-pin side: switch |
-| **Speaker** I2S amp (NS4168) | I2S1 (std) | BCLK 7 · LRCLK 8 · DIN 17 | 3.3 V | amp needs the 5 V bus for volume |
-| **Mic** PDM MEMS | I2S0 (pdm) | CLK 15 · DATA 16 | **3.3 V only ⚠** | 16 kHz/16-bit/mono. DATA follows VCC — 5 V damages the S3 |
+| **Speaker** I2S amp (MAX98357A) | I2S1 (std) | BCLK 7 · LRCLK 8 · DIN 17 | 3.3 V | Class-D, built-in thermal/over-current protection; amp needs the 5 V bus for volume |
+| **Mic** I2S MEMS (INMP441/ICS-43434) | I2S0 (std) | BCLK 15 · WS 18 · SD 16 | **3.3 V only ⚠** | 16 kHz/16-bit/mono. L/R→GND (left slot). VDD/data follow VCC — 5 V damages the S3 |
 
 ## Power
 
@@ -39,7 +39,7 @@ Free spares: **3, 4, 5, 6, 9, 18**.
 
 | Rail | Powers | Always on? |
 |---|---|---|
-| **3.3 V** | ESP32-S3, e-paper, SD, audio board (amp + mic) | yes (USB/regulator) |
+| **3.3 V** | ESP32-S3, e-paper, SD, audio (amp + mic) | yes (USB/regulator) |
 | **5 V bus** | LED ring, audio-amp volume headroom | switchable |
 
 So the ESP32 + e-paper + SD + encoder + mic all work on USB alone; the **LED ring
@@ -61,7 +61,7 @@ Full wiring + code pointer in [build.md](build.md#battery-sense-add-on); a
 `solide::power` driver is the planned home once it's wired.
 
 ## Caveats worth repeating
-- **Audio board VCC is 3.3 V only.** The PDM mic DATA line follows VCC; 5 V will damage
+- **Audio VCC is 3.3 V only.** The mic VDD/data lines follow VCC; 5 V will damage
   the S3's input.
 - **Battery sense reads the pack, not the 5 V rail** (the DC-DC output is regulated flat).
 - **Octal PSRAM occupies GPIO 33–37.** Never route a peripheral there.

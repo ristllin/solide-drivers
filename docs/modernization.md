@@ -63,6 +63,8 @@ re-validated on 3.3.9 (`RESULT all PASS (6/6)`); the bump broke nothing. Refs:
   mic delivers data.
 
 ### PDM notes
+> **Superseded (V0.1):** the mic is now an I2S-std INMP441/ICS-43434 (SCK 15 / WS 18 /
+> SD 16, L/R→GND); the PDM notes below are historical.
 - The PDM HP-filter fields (`hp_en` / `hp_cut_off_freq_hz` / `amplify_num`) are gated by
   `SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER` — absent on the 3.1.3 libs, present on 3.3.9. The
   driver sets them under `#if SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER` so it compiles either way.

@@ -3,6 +3,18 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.2.1] — 2026-07-11
+
+### Changed
+- **Audio: mic converted PDM → I2S-std RX** for the new **INMP441 / ICS-43434**
+  I2S MEMS microphone (replaces the PDM MEMS mic). Pins **SCK/BCLK 15 · WS 18 ·
+  SD 16** (was PDM CLK 15 / DATA 16 — the new line is WS/LRCLK on GPIO 18; an
+  L/R strap to GND selects the left slot). The board mic pin struct changed
+  `{clk, data}` → `{bclk, ws, din}`. The speaker amp is now a **MAX98357A**
+  I2S Class-D (was NS4168), with built-in thermal + over-current protection.
+  **Public API unchanged** (`solide::audio` signatures identical). GPIO 18 is no
+  longer a free spare.
+
 ## [0.2.0] — 2026-07-02
 
 One release, two independent changes bundled together (see "Versioning" in

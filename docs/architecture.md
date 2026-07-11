@@ -36,5 +36,5 @@ Public headers are all under `include/solide/`; consumers `#include <solide/…>
   `portMUX` spinlock, and the task renders from a snapshot taken under the lock.
 - `display`: an 8-entry command queue drained by a render task (the 3-colour panel
   takes ~18 s; callers never block).
-- `audio`: synchronous; TX (I2S1) + PDM-RX (I2S0) are independent channels, so the
+- `audio`: synchronous; TX (I2S1) + RX (I2S0) are independent channels, so the
   acoustic loopback can play and record concurrently (full-duplex read/write).

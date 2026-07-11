@@ -51,8 +51,7 @@
     4,
     5,
     6,
-    9,
-    18
+    9
   ],
   "peripherals": {
     "sd": {
@@ -110,7 +109,7 @@
     "speaker": {
       "namespace": "solide::audio",
       "bus": "I2S-std-TX (I2S1)",
-      "amp": "NS4168",
+      "amp": "MAX98357A",
       "pins": {
         "bclk": 7,
         "lrclk": 8,
@@ -121,14 +120,15 @@
     },
     "mic": {
       "namespace": "solide::audio",
-      "bus": "I2S-PDM-RX (I2S0)",
+      "bus": "I2S-STD-RX (I2S0)",
       "pins": {
-        "clk": 15,
-        "data": 16
+        "bclk": 15,
+        "ws": 18,
+        "din": 16
       },
       "volts": 3.3,
       "format": "16 kHz / 16-bit / mono",
-      "caveat": "shared VCC 3.3 V ONLY; 5 V damages the S3 (mic DATA follows VCC)"
+      "caveat": "VCC 3.3 V ONLY; 5 V damages the S3 (mic VDD/data follow VCC); L/R strap -> GND (left slot)"
     },
     "memory": {
       "namespace": "solide::memory",
