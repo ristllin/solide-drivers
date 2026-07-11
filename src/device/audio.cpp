@@ -3,7 +3,6 @@
 #include "solide/wav.h"
 #include "solide/tone.h"
 #include "driver/i2s_std.h"
-#include "driver/i2s_pdm.h"
 #include "esp_heap_caps.h"
 #include <math.h>
 
@@ -19,11 +18,12 @@ namespace solide::audio {
 static constexpr int SPK_BCLK  = kBoardSolideS3.spk.bclk;
 static constexpr int SPK_LRCLK = kBoardSolideS3.spk.lrclk;
 static constexpr int SPK_DIN   = kBoardSolideS3.spk.din;
-static constexpr int MIC_CLK   = kBoardSolideS3.mic.clk;
-static constexpr int MIC_DATA  = kBoardSolideS3.mic.data;
+static constexpr int MIC_BCLK  = kBoardSolideS3.mic.bclk;
+static constexpr int MIC_WS    = kBoardSolideS3.mic.ws;
+static constexpr int MIC_DIN   = kBoardSolideS3.mic.din;
 
 static constexpr i2s_port_t TX_PORT = I2S_NUM_1;   // speaker (std)
-static constexpr i2s_port_t RX_PORT = I2S_NUM_0;   // mic (pdm)
+static constexpr i2s_port_t RX_PORT = I2S_NUM_0;   // mic (std)
 
 static i2s_chan_handle_t g_tx = nullptr;
 static i2s_chan_handle_t g_rx = nullptr;
@@ -158,8 +158,15 @@ bool playWavFile(fs::FS& fs, const char* path) {
   return true;
 }
 
-// ---- mic (RX / i2s_pdm) ------------------------------------------------------
-
+// ---- mic (RX / i2s_std — INMP441 / ICS-43434) --------------------------------
+// The INMP441/ICS-43434 emit 24-bit PCM MSB-first, left-justified in a 32-bit I2S
+// slot (Philips), L/R strapped to GND = LEFT slot. We clock the full 32-bit slot
+// but tell the driver the DATA is 16-bit: it hands back the TOP 16 bits (the loud
+// MSBs, no post-shift), so `recordToBuffer`/`recordToFile` keep emitting 16 kHz /
+// 16-bit mono PCM byte-for-byte — the public contract (kMicSampleRate/BitsPerSample)
+// and every caller are unchanged. These mics have an internal DC-blocking HPF, so
+// the PDM `hp_en` filter is not needed. Mic RX = I2S_NUM_0, independent of the
+// speaker TX (I2S_NUM_1), so record + play run concurrently (loopbackSelfTest).
 static bool micInit() {
   if (g_rx) return true;
   i2s_chan_config_t cc = {};
@@ -169,25 +176,27 @@ static bool micInit() {
   cc.dma_frame_num = 256;
   if (i2s_new_channel(&cc, nullptr, &g_rx) != ESP_OK) { g_rx = nullptr; return false; }
 
-  i2s_pdm_rx_config_t pc = {};
-  pc.clk_cfg.sample_rate_hz  = kMicSampleRate;
-  pc.clk_cfg.clk_src         = I2S_CLK_SRC_DEFAULT;
-  pc.clk_cfg.mclk_multiple   = I2S_MCLK_MULTIPLE_256;
-  pc.clk_cfg.dn_sample_mode  = I2S_PDM_DSR_8S;
-  pc.clk_cfg.bclk_div        = 8;
-  pc.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_16BIT;
-  pc.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO;
-  pc.slot_cfg.slot_mode      = I2S_SLOT_MODE_MONO;
-  pc.slot_cfg.slot_mask      = I2S_PDM_SLOT_LEFT;      // matches the classic ONLY_LEFT
-#if SOC_I2S_SUPPORTS_PDM_RX_HP_FILTER
-  pc.slot_cfg.hp_en          = true;                  // high-pass removes the PDM DC offset
-  pc.slot_cfg.hp_cut_off_freq_hz = 35.5f;
-  pc.slot_cfg.amplify_num    = 1;
-#endif
-  pc.gpio_cfg.clk = (gpio_num_t)MIC_CLK;
-  pc.gpio_cfg.din = (gpio_num_t)MIC_DATA;
-  if (i2s_channel_init_pdm_rx_mode(g_rx, &pc) != ESP_OK) { i2s_del_channel(g_rx); g_rx = nullptr; return false; }
-  if (i2s_channel_enable(g_rx) != ESP_OK)                { i2s_del_channel(g_rx); g_rx = nullptr; return false; }
+  i2s_std_config_t sc = {};
+  sc.clk_cfg.sample_rate_hz  = kMicSampleRate;
+  sc.clk_cfg.clk_src         = I2S_CLK_SRC_DEFAULT;
+  sc.clk_cfg.mclk_multiple   = I2S_MCLK_MULTIPLE_256;
+  sc.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_16BIT;   // keep the 16-bit PCM contract
+  sc.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_32BIT;   // ...clocked from the 32-bit mic slot
+  sc.slot_cfg.slot_mode      = I2S_SLOT_MODE_MONO;
+  sc.slot_cfg.slot_mask      = I2S_STD_SLOT_LEFT;          // L/R -> GND = left slot (WS low)
+  sc.slot_cfg.ws_width       = 32;
+  sc.slot_cfg.ws_pol         = false;
+  sc.slot_cfg.bit_shift      = true;                       // Philips
+  sc.slot_cfg.left_align     = true;
+  sc.slot_cfg.big_endian     = false;
+  sc.slot_cfg.bit_order_lsb  = false;
+  sc.gpio_cfg.mclk = I2S_GPIO_UNUSED;
+  sc.gpio_cfg.bclk = (gpio_num_t)MIC_BCLK;
+  sc.gpio_cfg.ws   = (gpio_num_t)MIC_WS;
+  sc.gpio_cfg.dout = I2S_GPIO_UNUSED;
+  sc.gpio_cfg.din  = (gpio_num_t)MIC_DIN;
+  if (i2s_channel_init_std_mode(g_rx, &sc) != ESP_OK) { i2s_del_channel(g_rx); g_rx = nullptr; return false; }
+  if (i2s_channel_enable(g_rx) != ESP_OK)             { i2s_del_channel(g_rx); g_rx = nullptr; return false; }
   return true;
 }
 
@@ -198,7 +207,7 @@ static void micDeinit() {
   g_rx = nullptr;
 }
 
-// Discard the PDM start-up transient (~60 ms), same as the classic build.
+// Discard the mic start-up transient (~60 ms), same as the classic build.
 static void micSettle() {
   int16_t rb[256]; size_t got = 0; uint32_t t0 = millis();
   while (millis() - t0 < 60) i2s_channel_read(g_rx, rb, sizeof(rb), &got, 20);

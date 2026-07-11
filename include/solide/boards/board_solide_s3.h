@@ -8,7 +8,8 @@
 //
 // RESERVED GPIOs — never assign: 0/45/46 (strapping), 19/20 (native USB),
 // 43/44 (UART0), 26-32 (flash), 33-37 (OCTAL PSRAM — the N16R8 gotcha),
-// 48 (onboard RGB, repurposed here as the encoder switch). Free spares: 3,4,5,6,9,18.
+// 48 (onboard RGB, repurposed here as the encoder switch). Free spares: 3,4,5,6,9
+// (GPIO 18 is now the I2S mic WS/LRCLK).
 //
 // Power: SD + e-paper + audio run at 3.3 V; the LED ring needs the 5 V bus to
 // light and the audio amp uses it for volume. The audio board's shared VCC is
@@ -24,7 +25,7 @@ inline constexpr Board kBoardSolideS3 = {
   /* led */ { /*din*/ 21, /*count*/ 45 },
   /* enc */ { /*a*/ 1, /*b*/ 2, /*sw*/ 48 },
   /* spk */ { /*bclk*/ 7, /*lrclk*/ 8, /*din*/ 17 },
-  /* mic */ { /*clk*/ 15, /*data*/ 16 },
+  /* mic */ { /*bclk*/ 15, /*ws*/ 18, /*din*/ 16 },   // I2S std: INMP441/ICS-43434 (SCK=15, WS=18, SD=16, L/R->GND)
 };
 
 }  // namespace solide

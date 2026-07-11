@@ -20,7 +20,7 @@ struct Board {
   struct { int8_t din; uint16_t count; }        led;   // WS2812B data + pixel count
   struct { int8_t a, b, sw; }                   enc;   // EC11 quadrature + switch
   struct { int8_t bclk, lrclk, din; }           spk;   // I2S TX (speaker amp)
-  struct { int8_t clk, data; }                  mic;   // PDM RX (mic)
+  struct { int8_t bclk, ws, din; }              mic;   // I2S std RX (INMP441/ICS-43434)
 };
 
 // The active board, selected at build time via -DSOLIDE_BOARD=<id> (default: solide_s3).
