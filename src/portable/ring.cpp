@@ -149,9 +149,11 @@ int layout(int ledCount, int segCount, int gap, Span out[], int maxOut) {
   if (segCount <= 0 || maxOut <= 0 || ledCount <= 0) return 0;
   int n = segCount < maxOut ? segCount : maxOut;
 
-  // n>=2 segments sit on a ring => n boundaries => n gaps (incl. last->first wrap).
-  // A single segment fills the whole ring with no gap.
-  int gapCount = (n >= 2) ? n : 0;
+  // n segments on a ring => n boundaries => n gaps (incl. last->first wrap). A lone
+  // segment ALSO gets a gap now (was: filled the whole ring), so one session reads
+  // as an ARC, not a full circle — the caller passes a wider gap for n==1 to make
+  // the arc unmistakable (owner: "full circle makes no sense").
+  int gapCount = n;
   int g = gap < 0 ? 0 : gap;
   // Shrink the gap until segments get at least 1 LED each.
   while (g > 0 && (n + g * gapCount) > ledCount) g--;

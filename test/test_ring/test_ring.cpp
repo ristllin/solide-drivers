@@ -124,12 +124,18 @@ static void test_accent_and_progress() {
 
 static int sumLens(const Span* s, int n) { int t = 0; for (int i = 0; i < n; i++) t += s[i].len; return t; }
 
-static void test_layout_single_fills_ring() {
+static void test_layout_single_leaves_gap() {
   Span s[RING_MAX_SEGMENTS];
+  // A lone segment now ALSO gets a gap (was: filled the whole ring) so one session
+  // reads as an arc, not a full circle. gap=1 -> 44 lit + 1 gap; a wider gap (the
+  // caller passes ~L/4 for n==1) makes the arc unmistakable.
   int n = layout(45, 1, 1, s, RING_MAX_SEGMENTS);
   TEST_ASSERT_EQUAL_INT(1, n);
   TEST_ASSERT_EQUAL_INT(0, s[0].start);
-  TEST_ASSERT_EQUAL_INT(45, s[0].len);   // no gap for a lone segment
+  TEST_ASSERT_EQUAL_INT(44, s[0].len);   // 1-LED gap reserved even for a lone segment
+  int w = layout(45, 1, 11, s, RING_MAX_SEGMENTS);   // wide gap -> clear ~3/4 arc
+  TEST_ASSERT_EQUAL_INT(1, w);
+  TEST_ASSERT_EQUAL_INT(34, s[0].len);
 }
 
 static void test_layout_gaps_and_remainder() {
@@ -190,7 +196,7 @@ static void test_layout_no_overlap_and_tiles() {
       for (int k = 0; k < s[i].len; k++) { cover[(s[i].start + k) % 45]++; lit++; }
     }
     for (int i = 0; i < 45; i++) TEST_ASSERT_TRUE(cover[i] <= 1);   // no overlap
-    int gaps = (n >= 2) ? n : 0;                    // 1-LED gap per boundary (ring)
+    int gaps = n;                                   // 1-LED gap per boundary (incl. lone seg now)
     TEST_ASSERT_EQUAL_INT(45, lit + gaps);          // content + gaps tile the ring
   }
 }
@@ -330,7 +336,7 @@ int main(int, char**) {
   RUN_TEST(test_alloc_full_priority_eviction);
   RUN_TEST(test_snapshot_ordered_and_highest);
   RUN_TEST(test_accent_and_progress);
-  RUN_TEST(test_layout_single_fills_ring);
+  RUN_TEST(test_layout_single_leaves_gap);
   RUN_TEST(test_layout_gaps_and_remainder);
   RUN_TEST(test_layout_three_even);
   RUN_TEST(test_layout_gap_shrinks_to_fit);
