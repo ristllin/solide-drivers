@@ -27,6 +27,13 @@ bool begin();
 // True once begin() has mounted a card. All other calls require this.
 bool available();
 
+// Unmount + release the SPI bus, clearing the internal "mounted" latch so the
+// NEXT begin() does a real re-probe (SD.end() + SD.begin()) rather than the
+// idempotent no-op. Needed to recover a card that was pulled and re-seated
+// mid-run: end() then begin() is the only way to re-detect it without a reboot.
+// A no-op if nothing is mounted. Safe to call any time.
+void end();
+
 // ---- File I/O -------------------------------------------------------------
 // Paths are absolute ("/logs/boot.txt"); parent dirs are created as needed.
 bool   writeFile(const char* path, const String& data);   // truncate + write

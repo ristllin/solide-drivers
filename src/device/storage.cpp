@@ -54,6 +54,17 @@ bool begin() {
 
 bool available() { return g_ok; }
 
+// ---- unmount --------------------------------------------------------------
+void end() {
+  // Always tear the FS + bus down, even if g_ok was already false: a card that
+  // was pulled leaves SD's driver state half-alive, and a bare SD.begin() then
+  // returns stale success. SD.end() + SPI.end() forces a clean re-probe next
+  // begin(). end() is idempotent and safe with no card.
+  SD.end();
+  g_spi.end();
+  g_ok = false;
+}
+
 // ---- helpers --------------------------------------------------------------
 // Create every parent dir of `path` (mkdir is a no-op if it already exists).
 // "/logs/sub/boot.txt" → mkdir("/logs"), mkdir("/logs/sub").
