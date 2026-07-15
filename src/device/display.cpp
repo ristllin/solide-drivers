@@ -44,8 +44,14 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
   GxEPD2_290_C90fast(int16_t cs, int16_t dc, int16_t rst, int16_t busy)
       : GxEPD2_290_T94_V2(cs, dc, rst, busy) {}
 
+  // When set for one render, use the panel's TRUE full-update waveform (the parent's
+  // refresh) instead of our fast custom LUT — the only path that actually CLEARS
+  // accumulated SSD1680 ghosting. The caller sets it around a firstPage/nextPage.
+  bool forceFullUpdate = false;
+
   void refresh(bool partial_update_mode = false) override {
     if (partial_update_mode) { GxEPD2_290_T94_V2::refresh(true); return; }
+    if (forceFullUpdate) { GxEPD2_290_T94_V2::refresh(false); return; }  // ghost-clear
     _fastFull();
     _initial_refresh = false;
   }
@@ -131,7 +137,7 @@ enum RType { R_TEXT, R_MENU, R_MENU_FULL, R_BITMAP, R_CLEAR };
 struct RenderCmd {
   RType type;
   char* a; char* b;
-  int16_t extra; bool flag;
+  int16_t extra; bool flag; bool flag2;   // flag2 = fullClear for R_BITMAP
   const uint8_t* bmpK; const uint8_t* bmpR; int16_t w; int16_t h;
 };
 static QueueHandle_t rq = nullptr;
@@ -276,9 +282,14 @@ static void renderMenu(const String& packed, bool full) {
 
 // Full-screen bitmap: black plane always black; red plane red (3-colour) or
 // merged to black (fast B/W).
-static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, int16_t h, bool fast) {
+static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, int16_t h,
+                         bool fast, bool fullClear = false) {
   if (fast) {
     ensureBW();
+    // fullClear: render this frame with the TRUE full-update waveform (slower, but
+    // the only thing that wipes accumulated ghosting). The scheduler asks for it
+    // every FullRefreshEveryN renders + on the long-idle failsafe.
+    bwDisp.epd2.forceFullUpdate = fullClear;
     bwDisp.setFullWindow();
     bwDisp.firstPage();
     do {
@@ -286,6 +297,7 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
       if (black) bwDisp.drawBitmap(0, 0, black, w, h, GxEPD_BLACK);
       if (red)   bwDisp.drawBitmap(0, 0, red,   w, h, GxEPD_BLACK);
     } while (bwDisp.nextPage());
+    bwDisp.epd2.forceFullUpdate = false;
   } else {
     ensureColor();
     colorDisp.setFullWindow();
@@ -319,7 +331,7 @@ static void renderTask(void*) {
         case R_TEXT:      renderText(a, b, cmd.extra, cmd.flag); break;
         case R_MENU:      renderMenu(a, false); break;
         case R_MENU_FULL: renderMenu(a, true);  break;
-        case R_BITMAP:    renderBitmap(cmd.bmpK, cmd.bmpR, cmd.w, cmd.h, cmd.flag); break;
+        case R_BITMAP:    renderBitmap(cmd.bmpK, cmd.bmpR, cmd.w, cmd.h, cmd.flag, cmd.flag2); break;
         case R_CLEAR:     renderClear(); break;
       }
     }
@@ -327,13 +339,14 @@ static void renderTask(void*) {
 }
 
 static void enqueue(RType t, const String* a, const String* b, int16_t extra = 0, bool flag = false,
-                    const uint8_t* bK = nullptr, const uint8_t* bR = nullptr, int16_t w = 0, int16_t h = 0) {
+                    const uint8_t* bK = nullptr, const uint8_t* bR = nullptr, int16_t w = 0, int16_t h = 0,
+                    bool flag2 = false) {
   if (!rq) return;
   RenderCmd c;
   c.type = t;
   c.a = a ? strdup(a->c_str()) : nullptr;
   c.b = b ? strdup(b->c_str()) : nullptr;
-  c.extra = extra; c.flag = flag;
+  c.extra = extra; c.flag = flag; c.flag2 = flag2;
   c.bmpK = bK; c.bmpR = bR; c.w = w; c.h = h;
   if (xQueueSend(rq, &c, 0) != pdTRUE) {
     if (c.a) free(c.a);
@@ -383,8 +396,9 @@ void requestMenu(const solide::menu::MenuView& v, bool full) {
   enqueue(full ? R_MENU_FULL : R_MENU, &s, nullptr);
 }
 
-void requestBitmap(const uint8_t* black, const uint8_t* red, int16_t w, int16_t h, bool fast) {
-  enqueue(R_BITMAP, nullptr, nullptr, 0, fast, black, red, w, h);
+void requestBitmap(const uint8_t* black, const uint8_t* red, int16_t w, int16_t h, bool fast,
+                   bool fullClear) {
+  enqueue(R_BITMAP, nullptr, nullptr, 0, fast, black, red, w, h, fullClear);
 }
 
 void showArt(int state, bool fast) {

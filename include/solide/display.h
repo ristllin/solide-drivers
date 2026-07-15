@@ -32,8 +32,11 @@ void requestMenu(const solide::menu::MenuView& view, bool full = false);
 // Full-screen 1-bit bitmap(s): the `black` plane draws black; the `red` plane
 // draws red in 3-colour (fast=false) or merges to black in fast B/W (fast=true).
 // Either pointer may be null. Data must stay valid (PROGMEM / static).
+// fullClear (fast B/W only): render this frame with the panel's TRUE full-update
+// waveform (slower, but the only path that WIPES accumulated ghosting) instead of
+// the fast custom LUT. Used periodically (FullRefreshEveryN) + on a long-idle screen.
 void requestBitmap(const uint8_t* black, const uint8_t* red,
-                   int16_t w, int16_t h, bool fast);
+                   int16_t w, int16_t h, bool fast, bool fullClear = false);
 
 // Device status mascot (solide::art::State) — a convenience over requestBitmap.
 void showArt(int state, bool fast);
