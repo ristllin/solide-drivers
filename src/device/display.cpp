@@ -51,7 +51,19 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
 
   void refresh(bool partial_update_mode = false) override {
     if (partial_update_mode) { GxEPD2_290_T94_V2::refresh(true); return; }
-    if (forceFullUpdate) { GxEPD2_290_T94_V2::refresh(false); return; }  // ghost-clear
+    if (forceFullUpdate) {
+      // Ghost-clear: the panel's TRUE full-update (OTP waveform) runs noticeably
+      // longer than our 2.2 s fast LUT and was hitting GxEPD2's default 10 s
+      // _busy_timeout (observed 10001086 us = the cap exactly). Bailing at the cap
+      // mid-refresh can leave the ghost only half-wiped, defeating the point. Give
+      // the full waveform real headroom for the duration of this one refresh, then
+      // restore the default so a stuck panel still can't hang the render task.
+      const uint32_t savedTimeout = _busy_timeout;
+      _busy_timeout = 20000000UL;   // 20 s, this refresh only
+      GxEPD2_290_T94_V2::refresh(false);
+      _busy_timeout = savedTimeout;
+      return;
+    }
     _fastFull();
     _initial_refresh = false;
   }
