@@ -11,6 +11,11 @@
 // mono (top 16 bits of the mic's 24-bit slot); speaker rate is per call.
 // Synchronous (blocking); no background worker. TX (I2S1) and RX (I2S0) are
 // independent channels, so play + record run concurrently (loopback self-test).
+// SPEAKER CALLS ARE TASK-SAFE at whole-clip granularity: a recursive mutex is
+// held from spkOpen to the matching spkClose, so concurrent playPcm/playWavFile/
+// spkOpen callers (SFX task vs orchestrator turn task vs web beep) queue instead
+// of tearing down the TX channel under each other. A clip therefore BLOCKS until
+// the previous clip finishes. The streaming trio must open/feed/close from ONE task.
 // ============================================================================
 namespace solide::audio {
 

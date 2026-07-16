@@ -4,6 +4,8 @@
 #include "solide/tone.h"
 #include "driver/i2s_std.h"
 #include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <math.h>
 
 // IDF5 channel-API rewrite of the legacy-I2S driver. Every config struct is
@@ -27,6 +29,15 @@ static constexpr i2s_port_t RX_PORT = I2S_NUM_0;   // mic (std)
 
 static i2s_chan_handle_t g_tx = nullptr;
 static i2s_chan_handle_t g_rx = nullptr;
+// The TX channel is shared by independent tasks (SFX playback task, orchestrator
+// turn task, web beep, self-test): unserialized, a concurrent spkOpen tears down
+// g_tx under the other writer and its spkWrite silently no-ops. One RECURSIVE
+// mutex is held from spkOpen until the matching spkClose — whole-clip granularity
+// (clips are short), and playPcm/playWavFile/loopbackSelfTest all compose from
+// that pair, so every playback path serializes at this single seam. Recursive
+// because spkOpen re-opens (calls spkClose) and loopbackSelfTest nests an open
+// inside its own hold. Created in a global ctor (single-threaded on ESP-IDF).
+static SemaphoreHandle_t s_spkMutex = xSemaphoreCreateRecursiveMutex();
 static bool     s_spkOpen   = false;
 static uint8_t  s_carry     = 0;
 static bool     s_haveCarry = false;
@@ -104,16 +115,20 @@ static void spkWrite(const int16_t* mono, size_t n) {
 }
 
 bool spkOpen(uint32_t sampleRate) {
-  if (s_spkOpen) spkClose();
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
+  if (s_spkOpen) spkClose();   // gives back the previous open's hold
   if (sampleRate < 8000 || sampleRate > 48000) sampleRate = 24000;
   s_carry = 0; s_haveCarry = false;
-  if (!spkInit(sampleRate)) return false;
+  if (!spkInit(sampleRate)) { xSemaphoreGiveRecursive(s_spkMutex); return false; }
   s_spkOpen = true;
-  return true;
+  return true;   // mutex intentionally held until spkClose
 }
 
 void spkFeedBytes(const uint8_t* b, size_t n) {
-  if (!s_spkOpen) return;
+  // Owner-task calls recurse for free; a non-owner (contract violation) blocks
+  // until the clip ends, then no-ops on s_spkOpen==false instead of corrupting it.
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
+  if (!s_spkOpen) { xSemaphoreGiveRecursive(s_spkMutex); return; }
   static int16_t s[512];
   size_t si = 0, i = 0;
   if (s_haveCarry && n > 0) {
@@ -127,14 +142,18 @@ void spkFeedBytes(const uint8_t* b, size_t n) {
   }
   if (i < n) { s_carry = b[i]; s_haveCarry = true; }
   if (si) spkWrite(s, si);
+  xSemaphoreGiveRecursive(s_spkMutex);
 }
 
 void spkClose() {
-  if (!s_spkOpen) return;
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
+  if (!s_spkOpen) { xSemaphoreGiveRecursive(s_spkMutex); return; }
   if (s_haveCarry) { uint8_t z = 0; s_haveCarry = false; int16_t last = (int16_t)(s_carry | (z << 8)); spkWrite(&last, 1); }
   delay(60);       // let the DMA drain
   spkDeinit();
   s_spkOpen = false;
+  xSemaphoreGiveRecursive(s_spkMutex);   // this call's take
+  xSemaphoreGiveRecursive(s_spkMutex);   // the hold acquired by the matching spkOpen
 }
 
 bool playPcm(const int16_t* mono, size_t sampleCount, uint32_t sampleRate) {
@@ -306,6 +325,11 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
   bool ok = false;
   float mag = 0.0f; uint16_t rr = 0;
   float ctrlMag = 0.0f; uint16_t pk = 0; int32_t mean = 0; size_t captured = 0;
+  // Hold the speaker mutex across the whole test (the nested spkOpen/spkClose
+  // recurse) so no concurrent clip runs at the forced full-scale volume or
+  // reopens g_tx under lbPlayTask. lbPlayTask itself only calls spkWrite (no
+  // take), so it cannot deadlock against this hold.
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
   const int32_t savedVol = s_vol256; s_vol256 = 256;   // force full-scale tone for detection margin
   if (micInit() && spkOpen(rate)) {
     micSettle();
@@ -341,6 +365,7 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
   spkClose();
   micDeinit();
   s_vol256 = savedVol;   // restore master volume
+  xSemaphoreGiveRecursive(s_spkMutex);
   heap_caps_free(tone);
   heap_caps_free(rec);
   if (magOut) *magOut = (uint32_t)mag;
