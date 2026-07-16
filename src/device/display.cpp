@@ -52,12 +52,27 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
   void refresh(bool partial_update_mode = false) override {
     if (partial_update_mode) { GxEPD2_290_T94_V2::refresh(true); return; }
     if (forceFullUpdate) {
-      // Ghost-clear: the panel's TRUE full-update (OTP waveform) runs noticeably
-      // longer than our 2.2 s fast LUT and was hitting GxEPD2's default 10 s
-      // _busy_timeout (observed 10001086 us = the cap exactly). Bailing at the cap
-      // mid-refresh can leave the ghost only half-wiped, defeating the point. Give
-      // the full waveform real headroom for the duration of this one refresh, then
-      // restore the default so a stuck panel still can't hang the render task.
+      // 3-COLOUR panel + B/W driver, the "screen occasionally turns red" root cause
+      // (field bug 2026-07-16, round 2): the B/W parent uses RAM 0x26 as its
+      // previous-frame buffer for differential partials — GxEPD2_BW's page cycle
+      // writes the CURRENT FRAME into it on every render (writeImageForFullRefresh
+      // + writeImageAgain). On this panel 0x26 is the RED plane (0 bit = red), so
+      // by the time a ghost-clear runs, "previous frame" data is sitting in the
+      // red plane and the OTP full-update waveform — the ONE path that composites
+      // red (the fast register LUT and the differential partial mode both ignore
+      // it) — renders every black pixel of the last frame as RED. The one-time
+      // clearRedRAM() in ensureBW() couldn't help: the very next render re-fills
+      // 0x26. So blank the red plane HERE, immediately before the only red-
+      // compositing refresh; the page cycle's writeImageAgain right after this
+      // refresh restores 0x26 = current frame, keeping differential partials
+      // correct.
+      clearRedRAM();
+      // The panel's TRUE full-update (OTP waveform) runs noticeably longer than
+      // our 2.2 s fast LUT and was hitting GxEPD2's default 10 s _busy_timeout
+      // (observed 10001086 us = the cap exactly). Bailing at the cap mid-refresh
+      // can leave the ghost only half-wiped, defeating the point. Give the full
+      // waveform real headroom for the duration of this one refresh, then restore
+      // the default so a stuck panel still can't hang the render task.
       const uint32_t savedTimeout = _busy_timeout;
       _busy_timeout = 20000000UL;   // 20 s, this refresh only
       GxEPD2_290_T94_V2::refresh(false);
