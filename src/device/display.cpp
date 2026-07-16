@@ -52,36 +52,42 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
   void refresh(bool partial_update_mode = false) override {
     if (partial_update_mode) { GxEPD2_290_T94_V2::refresh(true); return; }
     if (forceFullUpdate) {
-      // 3-COLOUR panel + B/W driver, the "screen occasionally turns red" root cause
-      // (field bug 2026-07-16, round 2): the B/W parent uses RAM 0x26 as its
-      // previous-frame buffer for differential partials — GxEPD2_BW's page cycle
-      // writes the CURRENT FRAME into it on every render (writeImageForFullRefresh
-      // + writeImageAgain). On this panel 0x26 is the RED plane (0 bit = red), so
-      // by the time a ghost-clear runs, "previous frame" data is sitting in the
-      // red plane and the OTP full-update waveform — the ONE path that composites
-      // red (the fast register LUT and the differential partial mode both ignore
-      // it) — renders every black pixel of the last frame as RED. The one-time
-      // clearRedRAM() in ensureBW() couldn't help: the very next render re-fills
-      // 0x26. So blank the red plane HERE, immediately before the only red-
-      // compositing refresh; the page cycle's writeImageAgain right after this
-      // refresh restores 0x26 = current frame, keeping differential partials
-      // correct.
-      clearRedRAM();
-      // The panel's TRUE full-update (OTP waveform) runs noticeably longer than
-      // our 2.2 s fast LUT and was hitting GxEPD2's default 10 s _busy_timeout
-      // (observed 10001086 us = the cap exactly). Bailing at the cap mid-refresh
-      // can leave the ghost only half-wiped, defeating the point. Give the full
-      // waveform real headroom for the duration of this one refresh, then restore
-      // the default so a stuck panel still can't hang the render task.
-      const uint32_t savedTimeout = _busy_timeout;
-      _busy_timeout = 20000000UL;   // 20 s, this refresh only
-      GxEPD2_290_T94_V2::refresh(false);
-      _busy_timeout = savedTimeout;
+      // De-ghost round 3 (field 2026-07-16, owner saw red AGAIN with the red-RAM
+      // blank in place): the panel's OTP full-update waveform is a 3-COLOUR
+      // waveform — it drives the RED PIGMENT through its phases as part of the
+      // refresh ITSELF, regardless of RAM contents. There is no register recipe
+      // that makes that waveform red-free; the previous rounds (clear 0x26 on
+      // mode entry b8e6b85, clear 0x26 inside this branch bc8a562) fixed real
+      // RAM pollution but could not stop the waveform's own red drive. So the
+      // de-ghost NEVER runs the OTP waveform any more: it clears retention with
+      // B/W INVERSION FLASHES on the proven fast register LUT (all-black then
+      // all-white, twice) — the standard retention-clearing technique — then
+      // falls through to render the content frame normally. Red is never
+      // exercised, and the whole cycle is ~9 s instead of the OTP's ~18 s.
+      forceFullUpdate = false;   // re-entrancy guard: writeScreenBuffer can route
+                                 // through clearScreen -> refresh(false) on a fresh
+                                 // controller; that nested call must take the fast
+                                 // path, not loop back into this branch.
+      clearRedRAM();   // keep the red plane blank regardless (partials rewrite 0x26)
+      for (int cycle = 0; cycle < 2; ++cycle) {
+        writeScreenBuffer(0x00);   // all black (0x24 only — public parent helper)
+        _fastFull();
+        writeScreenBuffer(0xFF);   // all white
+        _fastFull();
+      }
+      // The flashes overwrote the frame the page cycle had staged in 0x24, and
+      // GxEPD2_BW::nextPage will NOT refresh again after this returns — signal
+      // renderBitmap to run one more normal content pass on the clean glass.
+      needContentRepaint = true;
+      _initial_refresh = false;
       return;
     }
     _fastFull();
     _initial_refresh = false;
   }
+  // Set when a de-ghost flash cycle consumed the frame that was in RAM — the
+  // caller must run one more normal render pass to put the content back on glass.
+  bool needContentRepaint = false;
   void refresh(int16_t x, int16_t y, int16_t w, int16_t h) override {
     GxEPD2_290_T94_V2::refresh(x, y, w, h);
   }
@@ -360,6 +366,19 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
       if (red)   bwDisp.drawBitmap(0, 0, red,   w, h, GxEPD_BLACK);
     } while (bwDisp.nextPage());
     bwDisp.epd2.forceFullUpdate = false;
+    // A de-ghost flash cycle consumed the frame that the page cycle had staged
+    // (inversion flashes overwrote 0x24): run ONE more normal fast-full pass so
+    // the content lands on the freshly de-ghosted glass.
+    if (bwDisp.epd2.needContentRepaint) {
+      bwDisp.epd2.needContentRepaint = false;
+      bwDisp.setFullWindow();
+      bwDisp.firstPage();
+      do {
+        bwDisp.fillScreen(GxEPD_WHITE);
+        if (black) bwDisp.drawBitmap(0, 0, black, w, h, GxEPD_BLACK);
+        if (red)   bwDisp.drawBitmap(0, 0, red,   w, h, GxEPD_BLACK);
+      } while (bwDisp.nextPage());
+    }
   } else {
     ensureColor();
     colorDisp.setFullWindow();
