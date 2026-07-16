@@ -89,6 +89,30 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
     _power_is_on = false;
     _using_partial_mode = false;
   }
+
+ public:
+  // Clear the panel's RED RAM (0x26) to white. This is a 3-colour (B/W/RED) SSD1680:
+  // the fast B/W path only writes the B/W RAM (0x24) and merges red->black, but a
+  // COLOUR render (colorDisp) leaves real data in the red RAM. The ghost-clear uses
+  // the panel's TRUE full-update (OTP) waveform, which renders BOTH RAMs — so a stale
+  // red plane paints RED and stays (the "screen goes red after a refresh" field bug).
+  // Clearing red RAM to 0xFF on every B/W-mode entry guarantees B/W renders (incl.
+  // ghost-clears) never resurrect a red plane. Writes the whole RAM, so it's correct
+  // regardless of rotation. ~4.7 KB over SPI, only on a colour<->B/W transition.
+  void clearRedRAM() {
+    const uint16_t wb = (WIDTH + 7) / 8;           // bytes per row (16 for 128 px)
+    _writeCommand(0x11); _writeData(0x03);         // data entry: X+ Y+
+    _writeCommand(0x44); _writeData(0x00); _writeData((uint8_t)(wb - 1));
+    _writeCommand(0x45); _writeData(0x00); _writeData(0x00);
+                         _writeData((uint8_t)((HEIGHT - 1) & 0xFF));
+                         _writeData((uint8_t)((HEIGHT - 1) >> 8));
+    _writeCommand(0x4E); _writeData(0x00);
+    _writeCommand(0x4F); _writeData(0x00); _writeData(0x00);
+    _writeCommand(0x26);                            // Write RAM (RED); 0xFF = white
+    for (uint32_t i = 0; i < (uint32_t)wb * HEIGHT; i++) _writeData(0xFF);
+  }
+
+ private:
   static const unsigned char WS_20_30[159];
 };
 
@@ -134,6 +158,9 @@ static void ensureBW() {
   bwDisp.init(115200, true, 50, false, epdSPI, epdSPISettings);
   bwDisp.setRotation(1);
   bwDisp.setTextWrap(false);
+  // 3-colour panel: wipe any red plane a prior colour render left behind, so a B/W
+  // ghost-clear (true full-update) can't resurrect it as a stuck-red screen.
+  bwDisp.epd2.clearRedRAM();
   activeMode = MODE_BW;
 }
 static void ensureColor() {
