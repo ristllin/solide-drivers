@@ -177,6 +177,7 @@ struct RenderCmd {
   RType type;
   char* a; char* b;
   int16_t extra; bool flag; bool flag2;   // flag2 = fullClear for R_BITMAP
+  bool flag3;                             // flag3 = partial (differential) for R_BITMAP
   const uint8_t* bmpK; const uint8_t* bmpR; int16_t w; int16_t h;
 };
 static QueueHandle_t rq = nullptr;
@@ -322,14 +323,21 @@ static void renderMenu(const String& packed, bool full) {
 // Full-screen bitmap: black plane always black; red plane red (3-colour) or
 // merged to black (fast B/W).
 static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, int16_t h,
-                         bool fast, bool fullClear = false) {
+                         bool fast, bool fullClear = false, bool partial = false) {
   if (fast) {
     ensureBW();
     // fullClear: render this frame with the TRUE full-update waveform (slower, but
     // the only thing that wipes accumulated ghosting). The scheduler asks for it
     // every FullRefreshEveryN renders + on the long-idle failsafe.
     bwDisp.epd2.forceFullUpdate = fullClear;
-    bwDisp.setFullWindow();
+    // partial: the SSD1680's differential mode — updates changed pixels with NO
+    // invert flash (the flicker-free path the menu has always used). Every 10th
+    // partial falls back to a fast full frame to bound ghost accumulation, same
+    // counter pattern as renderMenu; a fullClear frame is always full.
+    static int s_bmpPartials = 0;
+    const bool doPartial = partial && !fullClear && (++s_bmpPartials % 10 != 0);
+    if (doPartial) bwDisp.setPartialWindow(0, 0, SCR_W, SCR_H);
+    else           bwDisp.setFullWindow();
     bwDisp.firstPage();
     do {
       bwDisp.fillScreen(GxEPD_WHITE);
@@ -370,7 +378,7 @@ static void renderTask(void*) {
         case R_TEXT:      renderText(a, b, cmd.extra, cmd.flag); break;
         case R_MENU:      renderMenu(a, false); break;
         case R_MENU_FULL: renderMenu(a, true);  break;
-        case R_BITMAP:    renderBitmap(cmd.bmpK, cmd.bmpR, cmd.w, cmd.h, cmd.flag, cmd.flag2); break;
+        case R_BITMAP:    renderBitmap(cmd.bmpK, cmd.bmpR, cmd.w, cmd.h, cmd.flag, cmd.flag2, cmd.flag3); break;
         case R_CLEAR:     renderClear(); break;
       }
     }
@@ -379,13 +387,13 @@ static void renderTask(void*) {
 
 static void enqueue(RType t, const String* a, const String* b, int16_t extra = 0, bool flag = false,
                     const uint8_t* bK = nullptr, const uint8_t* bR = nullptr, int16_t w = 0, int16_t h = 0,
-                    bool flag2 = false) {
+                    bool flag2 = false, bool flag3 = false) {
   if (!rq) return;
   RenderCmd c;
   c.type = t;
   c.a = a ? strdup(a->c_str()) : nullptr;
   c.b = b ? strdup(b->c_str()) : nullptr;
-  c.extra = extra; c.flag = flag; c.flag2 = flag2;
+  c.extra = extra; c.flag = flag; c.flag2 = flag2; c.flag3 = flag3;
   c.bmpK = bK; c.bmpR = bR; c.w = w; c.h = h;
   if (xQueueSend(rq, &c, 0) != pdTRUE) {
     if (c.a) free(c.a);
@@ -436,8 +444,8 @@ void requestMenu(const solide::menu::MenuView& v, bool full) {
 }
 
 void requestBitmap(const uint8_t* black, const uint8_t* red, int16_t w, int16_t h, bool fast,
-                   bool fullClear) {
-  enqueue(R_BITMAP, nullptr, nullptr, 0, fast, black, red, w, h, fullClear);
+                   bool fullClear, bool partial) {
+  enqueue(R_BITMAP, nullptr, nullptr, 0, fast, black, red, w, h, fullClear, partial);
 }
 
 void showArt(int state, bool fast) {

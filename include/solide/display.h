@@ -35,8 +35,13 @@ void requestMenu(const solide::menu::MenuView& view, bool full = false);
 // fullClear (fast B/W only): render this frame with the panel's TRUE full-update
 // waveform (slower, but the only path that WIPES accumulated ghosting) instead of
 // the fast custom LUT. Used periodically (FullRefreshEveryN) + on a long-idle screen.
+// partial (fast B/W only): the SSD1680's differential mode — refreshes with NO
+// invert flash (the same flicker-free path requestMenu uses; ~0.75 s). Every 10th
+// partial internally falls back to a fast full frame to bound ghost accumulation.
+// Ignored when fullClear is set.
 void requestBitmap(const uint8_t* black, const uint8_t* red,
-                   int16_t w, int16_t h, bool fast, bool fullClear = false);
+                   int16_t w, int16_t h, bool fast, bool fullClear = false,
+                   bool partial = false);
 
 // Device status mascot (solide::art::State) — a convenience over requestBitmap.
 void showArt(int state, bool fast);
