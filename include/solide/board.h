@@ -17,6 +17,15 @@ struct Board {
   const char* name;
   struct { int8_t cs, mosi, sck, miso; }        sd;    // SPI (FSPI/SPI2)
   struct { int8_t sck, mosi, cs, dc, rst, busy; } epd;  // SPI (HSPI/SPI3), MISO unused
+  // Optional colour TFT + resistive touch (ILI9341 + XPT2046), an ALTERNATIVE
+  // to the e-paper on the same SPI3 pads. Display and touch share sck/mosi/miso
+  // and are separated by their own chip selects; the panel needs miso only
+  // because the touch controller reports coordinates on it. bl = backlight
+  // (PWM-capable; -1 = tied to 3V3, always on). tirq = pen-down interrupt
+  // (-1 = poll). Fitting the TFT RELEASES the encoder pins — a device is wired
+  // for one or the other, and screenModel in firmware NVS selects which driver
+  // binds at boot. sck = -1 when the TFT isn't fitted.
+  struct { int8_t sck, mosi, miso, cs, dc, rst, bl, tcs, tirq; } tft;
   struct { int8_t din; uint16_t count; }        led;   // WS2812B data + pixel count
   struct { int8_t a, b, sw; }                   enc;   // EC11 quadrature + switch
   struct { int8_t bclk, lrclk, din; }           spk;   // I2S TX (speaker amp)

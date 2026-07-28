@@ -16,11 +16,13 @@ def parse_pins():
     """Extract {label: gpio} for each peripheral group from the Board literal."""
     text = open(HDR).read()
     groups = {}
-    for grp in ("sd", "epd", "led", "enc", "spk", "mic"):
+    for grp in ("sd", "epd", "led", "enc", "spk", "mic", "tft"):
         m = re.search(r"/\*\s*%s\s*\*/\s*\{(.*?)\}" % grp, text, re.S)
         if not m:
             continue
-        pairs = re.findall(r"/\*\s*(\w+)\s*\*/\s*(\d+)", m.group(1))
+        # -?\d+ so a not-connected pin (-1, e.g. the TFT's tirq) is reported as
+        # -1 rather than silently dropped from the manifest.
+        pairs = re.findall(r"/\*\s*(\w+)\s*\*/\s*(-?\d+)", m.group(1))
         groups[grp] = {k: int(v) for k, v in pairs}
     return groups
 
@@ -57,10 +59,23 @@ def build(p):
             "mic": {"namespace": "solide::audio", "bus": "I2S-PDM-RX (I2S0)", "pins": p["mic"], "volts": 3.3,
                     "format": "16 kHz / 16-bit / mono",
                     "caveat": "shared VCC 3.3 V ONLY; 5 V damages the S3 (mic DATA follows VCC)"},
+            # Alternative display: fitted INSTEAD of the e-paper, and it consumes
+            # the encoder pins (1/2/48), so a TFT board has no knob — touch is the
+            # input device. Firmware NVS (screenModel) selects which pair binds.
+            "display_tft": {"namespace": "solide::display_tft", "bus": "HSPI/SPI3 (shared with touch)",
+                            "pins": p["tft"], "volts": 3.3,
+                            "panel": "2.8in ILI9341 240x320 RGB565",
+                            "alternative_to": "display", "releases": "encoder",
+                            "note": "tirq -1 = polled; bl is PWM (backlight is the idle draw)"},
+            "touch": {"namespace": "solide::touch", "chip": "XPT2046", "bus": "HSPI/SPI3 (shared with display_tft)",
+                      "pins": {"tcs": p["tft"]["tcs"], "tirq": p["tft"]["tirq"]}, "volts": 3.3,
+                      "max_spi_hz": 2000000,
+                      "caveat": "far slower than the panel's 40 MHz — needs its own SPI transaction settings"},
             "memory": {"namespace": "solide::memory",
                        "backends": ["NVS (typed key-value, <=15-char keys)", "SD JSON/blob under /memory/"]},
         },
-        "namespaces": ["solide::display", "solide::leds", "solide::ring", "solide::audio",
+        "namespaces": ["solide::display", "solide::display_tft", "solide::touch",
+                       "solide::leds", "solide::ring", "solide::audio",
                        "solide::storage", "solide::memory", "solide::input", "solide::menu",
                        "solide::art", "solide::selftest"],
         "power": {

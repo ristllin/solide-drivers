@@ -51,7 +51,8 @@
     4,
     5,
     6,
-    9
+    9,
+    18
   ],
   "peripherals": {
     "sd": {
@@ -109,7 +110,7 @@
     "speaker": {
       "namespace": "solide::audio",
       "bus": "I2S-std-TX (I2S1)",
-      "amp": "MAX98357A",
+      "amp": "NS4168",
       "pins": {
         "bclk": 7,
         "lrclk": 8,
@@ -120,7 +121,7 @@
     },
     "mic": {
       "namespace": "solide::audio",
-      "bus": "I2S-STD-RX (I2S0)",
+      "bus": "I2S-PDM-RX (I2S0)",
       "pins": {
         "bclk": 15,
         "ws": 18,
@@ -128,7 +129,39 @@
       },
       "volts": 3.3,
       "format": "16 kHz / 16-bit / mono",
-      "caveat": "VCC 3.3 V ONLY; 5 V damages the S3 (mic VDD/data follow VCC); L/R strap -> GND (left slot)"
+      "caveat": "shared VCC 3.3 V ONLY; 5 V damages the S3 (mic DATA follows VCC)"
+    },
+    "display_tft": {
+      "namespace": "solide::display_tft",
+      "bus": "HSPI/SPI3 (shared with touch)",
+      "pins": {
+        "sck": 42,
+        "mosi": 41,
+        "miso": 1,
+        "cs": 38,
+        "dc": 40,
+        "rst": 39,
+        "bl": 2,
+        "tcs": 48,
+        "tirq": -1
+      },
+      "volts": 3.3,
+      "panel": "2.8in ILI9341 240x320 RGB565",
+      "alternative_to": "display",
+      "releases": "encoder",
+      "note": "tirq -1 = polled; bl is PWM (backlight is the idle draw)"
+    },
+    "touch": {
+      "namespace": "solide::touch",
+      "chip": "XPT2046",
+      "bus": "HSPI/SPI3 (shared with display_tft)",
+      "pins": {
+        "tcs": 48,
+        "tirq": -1
+      },
+      "volts": 3.3,
+      "max_spi_hz": 2000000,
+      "caveat": "far slower than the panel's 40 MHz \u2014 needs its own SPI transaction settings"
     },
     "memory": {
       "namespace": "solide::memory",
@@ -140,6 +173,8 @@
   },
   "namespaces": [
     "solide::display",
+    "solide::display_tft",
+    "solide::touch",
     "solide::leds",
     "solide::ring",
     "solide::audio",
