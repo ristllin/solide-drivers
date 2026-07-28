@@ -16,6 +16,13 @@
 // The bus is SHARED with the XPT2046 touch controller (see touch.cpp) — hence
 // SPI transactions with per-device settings rather than a single global speed.
 // The panel runs at 40 MHz; the touch controller cannot go near that.
+//
+// ⚠ THREADING: the blit runs on this file's render task while touch is read
+// from the main loop, so two tasks drive one bus. That is safe because Arduino's
+// spiTransaction()/spiEndTransaction() take a per-bus mutex (esp32-hal-spi.c),
+// which serialises the two — verified, not assumed. The visible cost is
+// latency, not corruption: a touch read issued mid-blit blocks until the frame
+// finishes (~31 ms at 40 MHz), which is far inside the 8 s task watchdog.
 // ============================================================================
 
 namespace {
@@ -193,6 +200,12 @@ uint8_t backlight() { return g_backlight; }
 
 void fill(uint16_t colour565) {
   if (!rq) return;
+  // Wait out any frame already going to the panel. The SPI HAL serialises the
+  // two transactions so the BUS is safe either way, but two full-screen writes
+  // interleaving at transaction granularity would put half of each on the
+  // panel — a visibly torn frame rather than a clean fill.
+  while (g_busy) delay(1);
+
   // Swap to the panel's big-endian wire order, then push one row at a time so a
   // solid fill needs a 480-byte scratch instead of a second 150 KB buffer.
   const uint16_t be = uint16_t((colour565 << 8) | (colour565 >> 8));
