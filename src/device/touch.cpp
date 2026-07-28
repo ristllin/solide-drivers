@@ -23,11 +23,16 @@ constexpr int8_t T_CS = solide::kBoardSolideS3.tft.tcs;
 // 2 MHz: inside the controller's limit with margin. A conversion is 3 bytes.
 const SPISettings kTouchSPI(2000000, MSBFIRST, SPI_MODE0);
 
-// Control bytes: start | channel | 12-bit | differential mode.
-constexpr uint8_t CMD_X = 0x90;   // A2..A0 = 101 -> X position
-constexpr uint8_t CMD_Y = 0xD0;   // A2..A0 = 001 -> Y position
-constexpr uint8_t CMD_Z1 = 0xB0;
-constexpr uint8_t CMD_Z2 = 0xC0;
+// Control bytes: START(7) | A2..A0(6:4) | MODE(3)=0 12-bit | SER/DFR(2)=0 diff.
+// ⚠ The channel is bits 6:4, so read them from the byte, not from intuition:
+//   0xD0 = 1101_0000 -> A=101 = X position
+//   0x90 = 1001_0000 -> A=001 = Y position
+// These were transposed at first, which does NOT look broken — both axes stay
+// in range, so every tap simply lands somewhere else on the panel.
+constexpr uint8_t CMD_X = 0xD0;   // A2..A0 = 101 -> X position
+constexpr uint8_t CMD_Y = 0x90;   // A2..A0 = 001 -> Y position
+constexpr uint8_t CMD_Z1 = 0xB0;  // A2..A0 = 011
+constexpr uint8_t CMD_Z2 = 0xC0;  // A2..A0 = 100
 
 // Below this raw pressure the panel is considered untouched. Resistive panels
 // report a rising Z as contact firms up; this threshold rejects the noise floor

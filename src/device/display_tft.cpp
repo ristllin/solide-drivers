@@ -127,7 +127,6 @@ void blit(const uint16_t* fb) {
 struct FrameCmd { const uint16_t* fb; };
 
 void renderTask(void*) {
-  g_taskAlive = true;
   FrameCmd cmd;
   for (;;) {
     if (xQueueReceive(rq, &cmd, portMAX_DELAY) == pdTRUE) {
@@ -171,6 +170,11 @@ bool begin() {
     rq = nullptr;
     return false;
   }
+  // Set HERE, not as the task's first statement: the task runs at the same
+  // priority on the same core as setup(), so it has not been scheduled yet when
+  // begin() returns — taskAlive() would read false on a perfectly healthy board
+  // and any self-test row asserting it would false-FAIL.
+  g_taskAlive = true;
   return true;
 }
 

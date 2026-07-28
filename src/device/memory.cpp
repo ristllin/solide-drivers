@@ -12,6 +12,12 @@ static bool        g_ok = false;
 static bool keyOk(const char* k) { return k && k[0] && strlen(k) <= 15; }
 
 bool begin(const char* nsRoot) {
+  // Idempotent. ⚠ Preferences::begin() returns FALSE when the handle is already
+  // open, so a second call would clear g_ok and silently break every NVS read
+  // and write on the device. A consumer that needs one setting before the full
+  // solide::begin() (e.g. which display to bind) must be able to open NVS early
+  // without disarming the later call.
+  if (g_ok) return true;
   g_ok = g_prefs.begin(nsRoot, /*readOnly=*/false);
   if (!g_ok) Serial.println("memory: NVS begin() failed");
   return g_ok;

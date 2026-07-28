@@ -34,6 +34,12 @@ bool taskAlive();  // true once the render task is running (self-test)
 // Queue a full-screen RGB565 (big-endian) frame. Returns false if the driver
 // is not up or a previous frame is still in flight — the caller should keep its
 // buffer and retry, never free or overwrite it.
+//
+// ⚠ SINGLE PRODUCER. The busy check-and-set is not atomic, so two tasks calling
+// this concurrently could both pass the check; the loser's xQueueSend would fail
+// (depth 1) and clear busy while the winner is still blitting, and the next
+// compose would write into the buffer being read — a torn frame. One caller
+// only (in Nimbus: hw::tft::renderAndPush, from the main loop).
 bool pushFrame(const uint16_t* fb);
 bool busy();       // a frame is currently being written to the panel
 
