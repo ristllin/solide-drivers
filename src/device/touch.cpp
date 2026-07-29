@@ -50,6 +50,20 @@ constexpr uint32_t kPollIntervalMs = 20;   // 50 Hz — well above finger speed
 
 bool                    g_present = false;
 solide::touch::Calibration g_cal;
+// ⚠ g_cal is written from the WEB task (a calibration save) and read from the
+// main loop, on a dual-core S3 — genuinely in parallel, not merely preempted.
+// A 7-field struct assignment is not atomic, so an unguarded read can observe a
+// torn mix of old and new values and place a tap somewhere neither calibration
+// would. The lock is held only for the copy (a few dozen cycles), never across
+// SPI, so it cannot delay a transfer.
+portMUX_TYPE g_calMux = portMUX_INITIALIZER_UNLOCKED;
+
+solide::touch::Calibration calSnapshot() {
+  portENTER_CRITICAL(&g_calMux);
+  const solide::touch::Calibration c = g_cal;
+  portEXIT_CRITICAL(&g_calMux);
+  return c;
+}
 solide::touch::Point    g_state;
 uint8_t                 g_downCount = 0, g_upCount = 0;
 uint32_t                g_lastPollMs = 0;
@@ -148,12 +162,15 @@ Point read() {
   }
 
   if (g_downCount >= kDebounce) {
+    // One consistent snapshot for the whole mapping — mixing fields from two
+    // calibrations would land the tap somewhere neither of them describes.
+    const Calibration cal = calSnapshot();
     uint16_t ax = rx, ay = ry;
-    if (g_cal.swapXY) { const uint16_t t = ax; ax = ay; ay = t; }
-    g_state.x = mapClamped(ax, g_cal.minX, g_cal.maxX,
-                           solide::display_tft::kW - 1, g_cal.invertX);
-    g_state.y = mapClamped(ay, g_cal.minY, g_cal.maxY,
-                           solide::display_tft::kH - 1, g_cal.invertY);
+    if (cal.swapXY) { const uint16_t t = ax; ax = ay; ay = t; }
+    g_state.x = mapClamped(ax, cal.minX, cal.maxX,
+                           solide::display_tft::kW - 1, cal.invertX);
+    g_state.y = mapClamped(ay, cal.minY, cal.maxY,
+                           solide::display_tft::kH - 1, cal.invertY);
     g_state.pressure = rz;
     g_state.down = true;
   } else if (g_upCount >= kDebounce) {
@@ -162,7 +179,11 @@ Point read() {
   return g_state;
 }
 
-void setCalibration(const Calibration& c) { g_cal = c; }
-Calibration calibration() { return g_cal; }
+void setCalibration(const Calibration& c) {
+  portENTER_CRITICAL(&g_calMux);
+  g_cal = c;
+  portEXIT_CRITICAL(&g_calMux);
+}
+Calibration calibration() { return calSnapshot(); }
 
 }  // namespace solide::touch
