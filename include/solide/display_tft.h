@@ -25,8 +25,13 @@
 // ============================================================================
 namespace solide::display_tft {
 
-constexpr int16_t kW = 240;
-constexpr int16_t kH = 320;
+// ⚠ LANDSCAPE geometry. The module's native scan is 240x320 portrait; MADCTL's MV
+// bit rotates it, and the panel is mounted with its long edge horizontal, so the
+// addressable surface is 320x240. Must stay in step with nimbus/tft_render/theme.h
+// (kScreenW/kScreenH) and with the touch calibration's axis-swap flag — if the
+// three disagree, taps land somewhere other than where the pixels are.
+constexpr int16_t kW = 320;
+constexpr int16_t kH = 240;
 
 bool begin();      // init panel + backlight + start the render task; false on failure
 bool taskAlive();  // true once the render task is running (self-test)
@@ -42,6 +47,21 @@ bool taskAlive();  // true once the render task is running (self-test)
 // only (in Nimbus: hw::tft::renderAndPush, from the main loop).
 bool pushFrame(const uint16_t* fb);
 bool busy();       // a frame is currently being written to the panel
+
+// Re-assert the panel's mode state (colour format, access order, sleep-out,
+// display-on) WITHOUT a reset, so it is invisible when the panel is already fine.
+// A panel can lose that state on its own — a brownout on its rail, ESD, a glitch
+// on RESET — and then reverts to sleeping/18-bit, so pixels stop appearing while
+// the host has no idea. Cheap enough to call on a timer; panelInit() is not,
+// because it pulses RESET and blanks the screen.
+void rearm();
+
+// Which end of the landscape panel is "up". Both orientations are 320x240; only
+// the mounting decides which is upright, and that cannot be detected in software.
+// Persisted by the caller and applied immediately, so it can be dialled in on a
+// live device instead of guessed at build time. false = the default landscape.
+void setFlip(bool upsideDown);
+bool flipped();
 
 // Backlight, 0-100 %. 0 blanks the panel without losing its contents, which is
 // what the idle/screensaver path uses: on a TFT the backlight IS the idle draw,

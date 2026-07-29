@@ -46,6 +46,7 @@ QueueHandle_t     rq          = nullptr;
 volatile bool     g_taskAlive = false;
 volatile bool     g_busy      = false;
 uint8_t           g_backlight = 100;
+bool              g_flip = false;   // which end of the landscape panel is up
 
 // ILI9341 command set (only what is used).
 enum : uint8_t {
@@ -78,6 +79,12 @@ void setFullWindow() {
   writeCmdData(CMD_RASET, rows, 4);
 }
 
+// MADCTL for the mounted orientation. Bit 3 (0x08) is BGR: these red modules are
+// BGR-wired, and without it every colour comes out channel-swapped (a blue UI
+// renders orange). MV (0x20) is the portrait->landscape rotation; adding MY|MX
+// turns the landscape surface through 180 degrees.
+uint8_t madctlFor(bool flip) { return flip ? 0xE8 : 0x28; }
+
 void panelInit() {
   // Hardware reset if the pin is fitted, else the software reset alone.
   if (TFT_RST >= 0) {
@@ -93,10 +100,7 @@ void panelInit() {
   writeCmd(CMD_SWRESET);
   delay(150);
 
-  // MADCTL: portrait, BGR panel order. Bit3 (BGR) is set because these red
-  // boards are BGR-wired — without it every colour comes out channel-swapped
-  // (a blue UI renders orange), which is the classic "wrong colours" symptom.
-  const uint8_t madctl = 0x48;
+  const uint8_t madctl = madctlFor(g_flip);
   writeCmdData(CMD_MADCTL, &madctl, 1);
 
   const uint8_t pixfmt = 0x55;   // 16 bit/px, RGB565
@@ -107,6 +111,30 @@ void panelInit() {
   writeCmd(CMD_DISPON);
   delay(20);
 
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+}
+
+// Re-assert ONLY the mode state a panel reset would have lost: colour format,
+// memory access order, sleep-out and display-on. Deliberately NOT panelInit():
+// that pulses RESET and issues SWRESET, which BLANKS the panel — running it on a
+// timer would flash the screen every few seconds. These four commands are
+// idempotent, take microseconds, and are invisible when the panel is already fine.
+//
+// Why this exists: the ILI9341 can lose its state without the ESP32 noticing (a
+// brownout on its 3V3 rail, ESD, a glitch on RESET). It then reverts to defaults —
+// sleeping, 18-bit pixel format — so the next pixel stream renders as nothing, and
+// the panel sits WHITE while the firmware believes it is painted. Observed on
+// hardware 2026-07-29.
+void panelRearm() {
+  tftSPI.beginTransaction(kPanelSPI);
+  digitalWrite(TFT_CS, LOW);
+  const uint8_t madctl = madctlFor(g_flip);   // same value panelInit sets
+  writeCmdData(CMD_MADCTL, &madctl, 1);
+  const uint8_t pixfmt = 0x55;   // 16 bit/px RGB565
+  writeCmdData(CMD_PIXFMT, &pixfmt, 1);
+  writeCmd(CMD_SLPOUT);
+  writeCmd(CMD_DISPON);
   digitalWrite(TFT_CS, HIGH);
   tftSPI.endTransaction();
 }
@@ -180,6 +208,18 @@ bool begin() {
 
 bool taskAlive() { return g_taskAlive; }
 bool busy()      { return g_busy; }
+
+void rearm() { panelRearm(); }
+
+void setFlip(bool upsideDown) {
+  if (g_flip == upsideDown) return;
+  g_flip = upsideDown;
+  // MADCTL alone — no reset, so this is instant and does not blank the panel. The
+  // next full frame lands in the new orientation.
+  if (rq) panelRearm();
+}
+
+bool flipped() { return g_flip; }
 
 bool pushFrame(const uint16_t* fb) {
   if (!rq || !fb) return false;
