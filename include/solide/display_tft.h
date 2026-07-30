@@ -46,6 +46,10 @@ bool taskAlive();  // true once the render task is running (self-test)
 // compose would write into the buffer being read — a torn frame. One caller
 // only (in Nimbus: hw::tft::renderAndPush, from the main loop).
 bool pushFrame(const uint16_t* fb);
+// Same pixels, same commands — but staged through a caller-supplied INTERNAL
+// DMA-capable buffer instead of DMAing straight out of PSRAM. See the .cpp: a
+// long burst sourced from PSRAM was measured to reset this panel outright.
+bool pushFrameChunked(const uint16_t* fb, uint16_t* bounce, int rowsPerChunk);
 bool busy();       // a frame is currently being written to the panel
 
 // Re-assert the panel's mode state (colour format, access order, sleep-out,

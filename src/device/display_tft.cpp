@@ -399,6 +399,37 @@ void setPanelHz(uint32_t hz) {
   g_panelHz = hz;
 }
 
+// Blit a PSRAM framebuffer through an INTERNAL bounce buffer, a band at a time.
+//
+// ⚠ Why this exists: a 150 KB DMA burst sourced directly from PSRAM was measured
+// to RESET this panel — MADCTL 0x28 -> 0x00 — with nothing else running on the
+// board. fill(), which sources from internal memory, never does. On the S3, PSRAM
+// is reached over the same external-memory bus the SPI DMA must arbitrate for, so
+// a long burst out of PSRAM is a materially different transaction from one out of
+// internal SRAM. Copying band-by-band into a small internal DMA-capable buffer
+// keeps every panel command and the total byte count identical and changes ONLY
+// the source memory.
+//
+// Cost is one extra memcpy of the frame; the SPI time dominates either way.
+bool pushFrameChunked(const uint16_t* fb, uint16_t* bounce, int rowsPerChunk) {
+  if (!fb || !bounce || rowsPerChunk < 1) return false;
+  if (!rq) return false;
+  tftSPI.beginTransaction(kPanelSPI);
+  digitalWrite(TFT_CS, LOW);
+  setFullWindow();
+  writeCmd(CMD_RAMWR);
+  const int W = solide::display_tft::kW, H = solide::display_tft::kH;
+  for (int y = 0; y < H; y += rowsPerChunk) {
+    const int rows = (y + rowsPerChunk > H) ? (H - y) : rowsPerChunk;
+    const size_t n = size_t(rows) * size_t(W);
+    memcpy(bounce, fb + size_t(y) * size_t(W), n * 2);
+    tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(bounce), n * 2);
+  }
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+  return true;
+}
+
 void rearm() { panelRearm(); }
 
 void setFlip(bool upsideDown) {
