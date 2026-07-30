@@ -209,6 +209,41 @@ bool begin() {
 bool taskAlive() { return g_taskAlive; }
 bool busy()      { return g_busy; }
 
+// Read a panel register over MISO. Diagnostic ONLY: it answers the question that
+// decides where the touch fault lives. The panel's SDO and the touch's T_DO are
+// bridged onto ONE MISO line on this module, so if the PANEL can be read back the
+// line and the pin are electrically fine and the fault is in the touch path; if
+// NEITHER can be read, the shared MISO itself is the problem.
+// ILI9341 reads need a slow clock (~6 MHz max) and discard one dummy byte.
+uint32_t readReg(uint8_t reg, int nbytes) {
+  const SPISettings slow(4000000, MSBFIRST, SPI_MODE0);
+  tftSPI.beginTransaction(slow);
+  digitalWrite(TFT_CS, LOW);
+  dcCmd();
+  tftSPI.transfer(reg);
+  dcData();
+  tftSPI.transfer(0x00);              // dummy byte the datasheet requires
+  uint32_t v = 0;
+  for (int i = 0; i < nbytes; i++) v = (v << 8) | tftSPI.transfer(0x00);
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+  return v;
+}
+
+// Hold the panel in hardware RESET. Diagnostic ONLY: a reset ILI9341 releases its
+// SDO pin, so reading the touch controller while this is asserted isolates the two
+// devices on the shared MISO line. If touch data appears only here, the panel is
+// not tri-stating and the bridge is a hardware conflict, not a firmware bug.
+// The caller MUST follow with reinit() — the panel is dead until it does.
+void holdReset(bool asserted) {
+  if (TFT_RST < 0) return;
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, asserted ? LOW : HIGH);
+  delay(asserted ? 10 : 150);
+}
+
+void reinit() { panelInit(); }
+
 void rearm() { panelRearm(); }
 
 void setFlip(bool upsideDown) {

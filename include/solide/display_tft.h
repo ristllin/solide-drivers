@@ -60,6 +60,15 @@ void rearm();
 // the mounting decides which is upright, and that cannot be detected in software.
 // Persisted by the caller and applied immediately, so it can be dialled in on a
 // live device instead of guessed at build time. false = the default landscape.
+// Diagnostic readback over the SHARED MISO line (see the .cpp). 0x04 = RDDID,
+// 0x09 = RDDST, 0x0A = RDDPM. A plausible non-zero answer proves MISO works.
+uint32_t readReg(uint8_t reg, int nbytes);
+
+// Diagnostic: hold the panel in hardware reset so it releases the shared MISO
+// line, isolating the touch controller. The panel is DEAD until reinit().
+void holdReset(bool asserted);
+void reinit();   // re-run the full init sequence (blanks briefly; not for timers)
+
 void setFlip(bool upsideDown);
 bool flipped();
 

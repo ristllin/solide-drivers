@@ -40,9 +40,16 @@ bool readRaw(uint16_t& x, uint16_t& y, uint16_t& z);
 struct Calibration {
   uint16_t minX = 200, maxX = 3900;
   uint16_t minY = 200, maxY = 3900;
-  bool swapXY = false;    // panel wired portrait vs the controller's axes
+  // ⚠ swapXY DEFAULTS TRUE because the panel is mounted LANDSCAPE. The XPT2046's
+  // axes are fixed to the glass, so they follow the module's NATIVE portrait
+  // orientation — but MADCTL rotates the display 90 degrees, which means screen X
+  // now runs along the controller's Y. Rotating the display without rotating this
+  // mapping puts every tap on the wrong axis, which is indistinguishable from
+  // "touch is dead" and is exactly how it was first reported.
+  // Must stay in step with display_tft's MADCTL and nimbus/tft_render/theme.h.
+  bool swapXY = true;
   bool invertX = false;
-  bool invertY = false;
+  bool invertY = true;    // landscape: controller Y increases opposite screen X
 };
 void setCalibration(const Calibration& c);
 Calibration calibration();
