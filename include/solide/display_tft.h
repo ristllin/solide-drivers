@@ -98,6 +98,9 @@ bool flipped();
 // so blanking it is the real power saving (an e-paper screensaver image is not).
 void setBacklight(uint8_t pct);
 uint8_t backlight();
+// True when the backlight is genuinely driveable. backlight() alone reports the
+// REQUESTED level and stays convincing even if the PWM never attached.
+bool backlightAttached();
 
 void fill(uint16_t colour565);  // solid fill (bring-up + clear)
 void clear();                   // fill(0) — black

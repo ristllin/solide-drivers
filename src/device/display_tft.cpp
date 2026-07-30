@@ -66,6 +66,7 @@ volatile bool     g_taskAlive = false;
 volatile bool     g_busy      = false;
 uint8_t           g_backlight = 100;
 bool              g_flip = false;   // which end of the landscape panel is up
+bool              g_blAttached = false;  // did the backlight PWM actually attach?
 
 // ILI9341 command set (only what is used).
 enum : uint8_t {
@@ -202,7 +203,13 @@ bool begin() {
 
   if (TFT_BL >= 0) {
     // Arduino-ESP32 v3 LEDC API: attach picks the channel itself.
-    ledcAttach(TFT_BL, 5000 /*Hz*/, 8 /*bit*/);
+    // ⚠ CHECK the attach. Unchecked, a failure here makes every setBacklight()
+    // a silent no-op while backlight() keeps reporting the percentage we asked
+    // for — so the diagnostics claim "backlight on" for a panel that is dark.
+    // That is the same class of lie as reading the framebuffer and calling it
+    // the glass, and it cost real time during the blank-screen investigation.
+    g_blAttached = ledcAttach(TFT_BL, 5000 /*Hz*/, 8 /*bit*/);
+    if (!g_blAttached) log_e("display_tft: backlight PWM attach FAILED on GPIO %d", int(TFT_BL));
     setBacklight(100);
   }
 
@@ -400,8 +407,14 @@ void setBacklight(uint8_t pct) {
   if (pct > 100) pct = 100;
   g_backlight = pct;
   if (TFT_BL < 0) return;                 // tied to 3V3: always on, nothing to do
+  if (!g_blAttached) return;              // no PWM channel — do not pretend
   ledcWrite(TFT_BL, (uint32_t(pct) * 255) / 100);
 }
+
+// Whether the backlight is actually CONTROLLABLE, as opposed to the percentage
+// we last asked for. A dark panel with backlight()==100 and this false means the
+// light was never driven at all.
+bool backlightAttached() { return TFT_BL < 0 || g_blAttached; }
 
 uint8_t backlight() { return g_backlight; }
 
