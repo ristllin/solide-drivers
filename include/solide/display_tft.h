@@ -69,6 +69,11 @@ uint32_t readReg(uint8_t reg, int nbytes);
 void holdReset(bool asserted);
 void reinit();   // re-run the full init sequence (blanks briefly; not for timers)
 
+// True while the panel still holds the configuration we wrote. Cheap (a few
+// bytes over SPI) and deterministic: it compares the panel's own MADCTL readback
+// against what we set, so a silently-reset panel is detected rather than guessed.
+bool healthy();
+
 void setFlip(bool upsideDown);
 bool flipped();
 

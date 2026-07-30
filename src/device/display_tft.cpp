@@ -244,6 +244,21 @@ void holdReset(bool asserted) {
 
 void reinit() { panelInit(); }
 
+// Is the panel still configured, or has it silently reset?
+//
+// RDDST's top byte mirrors MADCTL, and we KNOW what we wrote — so comparing it
+// against madctlFor() is a deterministic check, not a heuristic. A panel that
+// lost its state reverts to the 0x00 power-on default and fails this instantly.
+// Measured on hardware: 0x28 stable across reads on a healthy panel (bit 0 is
+// the scan-direction flag and toggles during refresh, hence the mask).
+//
+// ⚠ RDDPM (0x0A) would have been the obvious register, but it reads 0x00 on this
+// panel even when it is demonstrably working — unusable. RDDST does work.
+bool healthy() {
+  const uint8_t got = uint8_t(readReg(0x09, 4) >> 24);
+  return (got & 0xFE) == (madctlFor(g_flip) & 0xFE);
+}
+
 void rearm() { panelRearm(); }
 
 void setFlip(bool upsideDown) {
