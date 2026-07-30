@@ -37,7 +37,26 @@ constexpr int8_t TFT_BL   = solide::kBoardSolideS3.tft.bl;
 
 // 40 MHz is the ILI9341's documented write ceiling and what these modules run
 // at reliably; MODE0, MSB-first.
-const SPISettings kPanelSPI(40000000, MSBFIRST, SPI_MODE0);
+// ⚠ Panel SPI clock. 40 MHz is the ILI9341's rated maximum and is fine on a
+// PCB — but this panel is wired with jumpers and three bridges made on the
+// module (T_CLK/T_DIN/T_DO), which is a long, unterminated, unshielded stub.
+// Signal integrity, not the controller, is the limit there.
+//
+// Symptom when it is too fast, and it is a MISLEADING one: register reads (which
+// this driver does at 4 MHz) stay perfect, so the panel looks healthy — MADCTL
+// reads back correctly, the render task is alive, the backlight is on, the
+// framebuffer holds the right pixels — while the 40 MHz RAMWR burst never lands
+// and the glass shows white or black. Every software-side check passes.
+// Runtime-tunable so the ceiling can be found on real wiring without a reflash.
+// 40 MHz — the ILI9341's rated maximum, and MEASURED sound on this wiring:
+// TFTHZ sweeps 64-pixel burst round-trips at 4/10/20/26/40 MHz and TFTFILL?
+// round-trips whole RGB frames through the real blit path, reading back the far
+// corners. Both report zero mismatches at 40. Running slower "for margin" would
+// be cargo cult against evidence, so the shipped clock stays at spec; TFTHZ
+// exists to re-measure in seconds if a board ever disagrees.
+uint32_t g_panelHz = 40000000;
+SPISettings panelSPI() { return SPISettings(g_panelHz, MSBFIRST, SPI_MODE0); }
+#define kPanelSPI panelSPI()
 
 // The TFT sits on the same pads the e-paper used (HSPI/SPI3).
 SPIClass tftSPI(HSPI);
@@ -257,6 +276,100 @@ void reinit() { panelInit(); }
 bool healthy() {
   const uint8_t got = uint8_t(readReg(0x09, 4) >> 24);
   return (got & 0xFE) == (madctlFor(g_flip) & 0xFE);
+}
+
+// Write a known pixel pattern at the CURRENT clock, then read it back at a slow,
+// known-good clock and count mismatches. This is the objective test for the
+// pixel path: it needs no human looking at the glass, and it separates "the
+// panel is misconfigured" (registers, which readReg already covers) from "the
+// pixel burst does not survive the wiring".
+//
+// ⚠ The readback is deliberately SLOW and the write is not. RAMRD tops out
+// around 6 MHz on this controller, so reading fast would measure the read path
+// instead of the thing under test. And RAMRD returns 18-bit 6-6-6 regardless of
+// the 16-bit write format, so the comparison is on the top 5 bits per channel.
+int pixelRoundTrip(int n) {
+  if (n < 1) n = 1;
+  if (n > 64) n = 64;
+  uint16_t want[64];
+  for (int i = 0; i < n; i++) want[i] = uint16_t((i * 2731) ^ 0xA5A5);   // varied bit patterns
+
+  // ---- write at the clock under test ----
+  tftSPI.beginTransaction(kPanelSPI);
+  digitalWrite(TFT_CS, LOW);
+  const uint8_t cols[4] = {0, 0, uint8_t((n - 1) >> 8), uint8_t((n - 1) & 0xFF)};
+  const uint8_t rows[4] = {0, 0, 0, 0};
+  writeCmdData(CMD_CASET, cols, 4);
+  writeCmdData(CMD_RASET, rows, 4);
+  writeCmd(CMD_RAMWR);
+  dcData();
+  // ⚠ writeBytes, NOT a loop of transfer(). Per-byte transfers leave gaps between
+  // bytes, so they do not produce the sustained burst a real blit does — an
+  // earlier version of this test used them and reported a clean 40 MHz while the
+  // actual 153 KB blit was the thing under suspicion. Measure the path you ship.
+  uint8_t burst[128];
+  for (int i = 0; i < n; i++) {
+    burst[i * 2]     = uint8_t(want[i] >> 8);
+    burst[i * 2 + 1] = uint8_t(want[i] & 0xFF);
+  }
+  tftSPI.writeBytes(burst, size_t(n) * 2);
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+
+  // ---- read back slowly ----
+  const SPISettings slow(4000000, MSBFIRST, SPI_MODE0);
+  tftSPI.beginTransaction(slow);
+  digitalWrite(TFT_CS, LOW);
+  writeCmdData(CMD_CASET, cols, 4);
+  writeCmdData(CMD_RASET, rows, 4);
+  dcCmd();
+  tftSPI.transfer(0x2E);            // RAMRD
+  dcData();
+  tftSPI.transfer(0x00);            // dummy byte
+  int bad = 0;
+  for (int i = 0; i < n; i++) {
+    const uint8_t r = tftSPI.transfer(0x00);
+    const uint8_t g = tftSPI.transfer(0x00);
+    const uint8_t b = tftSPI.transfer(0x00);
+    const uint16_t got = uint16_t(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+    if (got != want[i]) bad++;
+  }
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+  return bad;
+}
+
+// Read one pixel back from anywhere on the panel (slow clock — RAMRD is slow).
+// Used to verify the FULL-FRAME path: the 64-pixel round-trip above only proves
+// the origin works, and an addressing fault would pass it while leaving most of
+// the screen untouched.
+uint16_t readPixel(int px, int py) {
+  const SPISettings slow(4000000, MSBFIRST, SPI_MODE0);
+  tftSPI.beginTransaction(slow);
+  digitalWrite(TFT_CS, LOW);
+  const uint8_t cols[4] = {uint8_t(px >> 8), uint8_t(px & 0xFF),
+                           uint8_t(px >> 8), uint8_t(px & 0xFF)};
+  const uint8_t rows[4] = {uint8_t(py >> 8), uint8_t(py & 0xFF),
+                           uint8_t(py >> 8), uint8_t(py & 0xFF)};
+  writeCmdData(CMD_CASET, cols, 4);
+  writeCmdData(CMD_RASET, rows, 4);
+  dcCmd();
+  tftSPI.transfer(0x2E);
+  dcData();
+  tftSPI.transfer(0x00);
+  const uint8_t r = tftSPI.transfer(0x00);
+  const uint8_t g = tftSPI.transfer(0x00);
+  const uint8_t b = tftSPI.transfer(0x00);
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+  return uint16_t(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+}
+
+uint32_t panelHz() { return g_panelHz; }
+void setPanelHz(uint32_t hz) {
+  if (hz < 1000000) hz = 1000000;
+  if (hz > 40000000) hz = 40000000;
+  g_panelHz = hz;
 }
 
 void rearm() { panelRearm(); }

@@ -74,6 +74,22 @@ void reinit();   // re-run the full init sequence (blanks briefly; not for timer
 // against what we set, so a silently-reset panel is detected rather than guessed.
 bool healthy();
 
+// Panel SPI clock. Tunable at runtime because the safe ceiling is a property of
+// the WIRING, not the controller: on jumpered/bridged wiring a 40 MHz pixel
+// burst can fail while 4 MHz register reads stay perfect — so the panel looks
+// entirely healthy while showing nothing.
+// Write n pixels at the current clock, read them back slowly, return the
+// mismatch count. 0 = the pixel path is sound at this clock; non-zero measures
+// how badly the write burst is failing. No human eyes required.
+int pixelRoundTrip(int n);
+// Read one pixel back from the panel's own memory, anywhere on the surface.
+// Proves the FULL-frame path: pixelRoundTrip only covers the origin, so an
+// addressing fault would pass it while most of the screen stayed untouched.
+uint16_t readPixel(int px, int py);
+
+uint32_t panelHz();
+void setPanelHz(uint32_t hz);
+
 void setFlip(bool upsideDown);
 bool flipped();
 
