@@ -71,6 +71,9 @@ bool              g_blAttached = false;  // did the backlight PWM actually attac
 // ILI9341 command set (only what is used).
 enum : uint8_t {
   CMD_SWRESET = 0x01, CMD_SLPOUT = 0x11, CMD_DISPON = 0x29,
+  CMD_NORON   = 0x13,   // normal display mode ON (exits PARTIAL mode)
+  CMD_INVOFF  = 0x20,   // inversion off
+  CMD_VSCRSADD = 0x37,  // vertical scroll start address
   CMD_CASET   = 0x2A, CMD_RASET  = 0x2B, CMD_RAMWR  = 0x2C,
   CMD_MADCTL  = 0x36, CMD_PIXFMT = 0x3A,
 };
@@ -153,6 +156,23 @@ void panelRearm() {
   writeCmdData(CMD_MADCTL, &madctl, 1);
   const uint8_t pixfmt = 0x55;   // 16 bit/px RGB565
   writeCmdData(CMD_PIXFMT, &pixfmt, 1);
+  // ⚠ Also reset the display MODES, not just sleep/display-on.
+  //
+  // These are the states that blank or corrupt the picture while leaving MADCTL,
+  // GRAM, the render task and the backlight all reading perfectly healthy — the
+  // exact signature of the blank-screen fault, and invisible to every diagnostic
+  // this driver has (RDDPM is unimplemented on this panel, so display state
+  // cannot be read back at all).
+  //   NORON     — leaves PARTIAL mode, which shows a sliver and blanks the rest
+  //   INVOFF    — leaves inverted colour
+  //   VSCRSADD 0— rewinds a vertical scroll that would display the wrong region
+  // All idempotent, all invisible on a healthy panel, all microseconds. Since
+  // the fault cannot be detected, the recovery has to cover the possibilities
+  // blindly rather than wait for a signal that will never come.
+  writeCmd(CMD_NORON);
+  writeCmd(CMD_INVOFF);
+  const uint8_t scroll[2] = {0, 0};
+  writeCmdData(CMD_VSCRSADD, scroll, 2);
   writeCmd(CMD_SLPOUT);
   writeCmd(CMD_DISPON);
   digitalWrite(TFT_CS, HIGH);
