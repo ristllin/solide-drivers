@@ -3,9 +3,11 @@
 #include "solide/board.h"
 #include "solide/leds.h"
 #include "solide/display.h"
+#include "solide/display_tft.h"
 #include "solide/storage.h"
 #include "solide/memory.h"
 #include "solide/input.h"
+#include "solide/touch.h"
 #include "solide/audio.h"
 #include "solide/tone.h"
 #include <Arduino.h>
@@ -24,8 +26,16 @@ static bool testLed() {
 }
 
 static bool testEpd() {
+  // ⚠ Test the panel that is actually BOUND. A board fitted with the colour TFT
+  // never starts the e-paper task, so checking display::taskAlive() there
+  // reports FAIL for hardware that is absent by design — slandering healthy
+  // hardware, the same way the encoder row below did.
+  if (display_tft::taskAlive()) {
+    Serial.printf("RESULT epd PASS panel=tft taskAlive=1\n");
+    return true;
+  }
   bool a = display::taskAlive();
-  Serial.printf("RESULT epd %s taskAlive=%d\n", a ? "PASS" : "FAIL", a);
+  Serial.printf("RESULT epd %s panel=eink taskAlive=%d\n", a ? "PASS" : "FAIL", a);
   return a;
 }
 
@@ -50,8 +60,15 @@ static bool testMemory() {
 }
 
 static bool testInput() {
+  // Same reasoning: a TFT board has no encoder (its pins are the panel's), so
+  // the input device to check there is the touch controller.
+  if (touch::present()) {
+    Serial.printf("RESULT input PASS dev=touch present=1\n");
+    return true;
+  }
   bool a = input::taskAlive();
-  Serial.printf("RESULT input %s taskAlive=%d pressed=%d\n", a ? "PASS" : "FAIL", a, input::pressed());
+  Serial.printf("RESULT input %s dev=encoder taskAlive=%d pressed=%d\n",
+                a ? "PASS" : "FAIL", a, input::pressed());
   return a;
 }
 
