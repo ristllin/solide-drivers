@@ -162,8 +162,14 @@ const unsigned char GxEPD2_290_C90fast::WS_20_30[159] PROGMEM = {
 // ---- two display instances on the same physical panel -----------------------
 static GxEPD2_BW<GxEPD2_290_C90fast, GxEPD2_290_C90fast::HEIGHT>
     bwDisp(GxEPD2_290_C90fast(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
+#ifndef NIMBUS_NO_COLOR_EINK
+// The 3-colour instance carries its own ~9.6 KB framebuffer in internal SRAM. A build
+// that never renders in colour (Nimbus: no Kind::Color producer) defines
+// NIMBUS_NO_COLOR_EINK to drop it and render colour requests as B/W instead — reclaiming
+// a large CONTIGUOUS internal-SRAM block (helps fragmentation, widens the tool-loop margin).
 static GxEPD2_3C<GxEPD2_290_C90c, GxEPD2_290_C90c::HEIGHT>
     colorDisp(GxEPD2_290_C90c(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
+#endif
 
 static const int16_t SCR_W = 296;
 static const int16_t SCR_H = 128;
@@ -184,6 +190,7 @@ static void ensureBW() {
   bwDisp.epd2.clearRedRAM();
   activeMode = MODE_BW;
 }
+#ifndef NIMBUS_NO_COLOR_EINK
 static void ensureColor() {
   if (activeMode == MODE_COLOR) return;
   colorDisp.init(115200, true, 50, false, epdSPI, epdSPISettings);
@@ -191,6 +198,7 @@ static void ensureColor() {
   colorDisp.setTextWrap(false);
   activeMode = MODE_COLOR;
 }
+#endif
 
 // ---- render queue ------------------------------------------------------------
 enum RType { R_TEXT, R_MENU, R_MENU_FULL, R_BITMAP, R_CLEAR };
@@ -380,6 +388,19 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
       } while (bwDisp.nextPage());
     }
   } else {
+#ifdef NIMBUS_NO_COLOR_EINK
+    // colour instance dropped for SRAM — render the colour request in B/W (red plane
+    // merged to black), identical to the fast path above. Never hit on Nimbus (no
+    // Kind::Color producer); the fallback exists only so this can't crash if one appears.
+    ensureBW();
+    bwDisp.setFullWindow();
+    bwDisp.firstPage();
+    do {
+      bwDisp.fillScreen(GxEPD_WHITE);
+      if (black) bwDisp.drawBitmap(0, 0, black, w, h, GxEPD_BLACK);
+      if (red)   bwDisp.drawBitmap(0, 0, red,   w, h, GxEPD_BLACK);
+    } while (bwDisp.nextPage());
+#else
     ensureColor();
     colorDisp.setFullWindow();
     colorDisp.firstPage();
@@ -388,6 +409,7 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
       if (black) colorDisp.drawBitmap(0, 0, black, w, h, GxEPD_BLACK);
       if (red)   colorDisp.drawBitmap(0, 0, red,   w, h, GxEPD_RED);
     } while (colorDisp.nextPage());
+#endif
   }
 }
 
