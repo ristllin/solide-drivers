@@ -25,7 +25,7 @@ program this hardware without reinventing the drivers.
 ```ini
 ; platformio.ini of your firmware
 [env:esp32s3]
-platform = https://github.com/pioarduino/platform-espressif32/releases/download/53.03.13/platform-espressif32.zip
+platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.39/platform-espressif32.zip
 board = esp32-s3-devkitc-1
 framework = arduino
 board_build.arduino.memory_type = qio_opi
@@ -51,5 +51,5 @@ pio test -e native                        # host unit tests (portable core)
 pio run  -e smoke -t upload -t monitor    # platform smoke test on hardware
 ```
 
-Toolchain: Arduino-ESP32 3.1.3 / ESP-IDF 5.3 via pioarduino (see
+Toolchain: Arduino-ESP32 3.3.9 / ESP-IDF 5.5.4 via pioarduino 55.03.39 (see
 [`docs/modernization.md`](docs/modernization.md)). MIT licensed.

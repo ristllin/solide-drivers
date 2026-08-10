@@ -17,7 +17,8 @@ reference: [`docs/hardware.md`](docs/hardware.md). Pin source of truth:
 `include/solide/boards/board_solide_s3.h` (a `constexpr solide::Board`).
 
 Peripherals → namespaces: `solide::display` (e-paper), `solide::leds` (WS2812B ring
-+ `solide::ring` status segmentation), `solide::audio` (I2S speaker + PDM mic),
++ `solide::ring` status segmentation), `solide::audio` (I2S speaker + I2S-std
+MEMS mic, INMP441/ICS-43434),
 `solide::storage` (SD), `solide::memory` (NVS + SD JSON), `solide::input` (encoder
 + `solide::menu`).
 
@@ -64,5 +65,5 @@ multiple logical commits under one bump — just say so in the CHANGELOG entry.
 ## Known hardware caveats
 
 - LED ring + audio amp need the **5 V** bus; everything else runs on 3.3 V.
-- Audio board VCC is **3.3 V only** — the PDM mic DATA follows VCC; 5 V damages the S3.
+- Audio board VCC is **3.3 V only** — the mic's DATA line follows VCC; 5 V damages the S3.
 - Octal PSRAM occupies GPIO 33–37 (the N16R8 gotcha) — never assign them.
