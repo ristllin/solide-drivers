@@ -159,14 +159,21 @@ const unsigned char GxEPD2_290_C90fast::WS_20_30[159] PROGMEM = {
   0x22, 0x17, 0x41, 0x0, 0x32, 0x36
 };
 
+// ---- optional build flag: drop the 3-colour instance -------------------------
+// SOLIDE_NO_COLOR_EINK is the canonical flag name. NIMBUS_NO_COLOR_EINK is kept
+// as a working alias for the original downstream consumer — defining either works.
+#if defined(NIMBUS_NO_COLOR_EINK) && !defined(SOLIDE_NO_COLOR_EINK)
+#define SOLIDE_NO_COLOR_EINK
+#endif
+
 // ---- two display instances on the same physical panel -----------------------
 static GxEPD2_BW<GxEPD2_290_C90fast, GxEPD2_290_C90fast::HEIGHT>
     bwDisp(GxEPD2_290_C90fast(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
-#ifndef NIMBUS_NO_COLOR_EINK
+#ifndef SOLIDE_NO_COLOR_EINK
 // The 3-colour instance carries its own ~9.6 KB framebuffer in internal SRAM. A build
-// that never renders in colour (Nimbus: no Kind::Color producer) defines
-// NIMBUS_NO_COLOR_EINK to drop it and render colour requests as B/W instead — reclaiming
-// a large CONTIGUOUS internal-SRAM block (helps fragmentation, widens the tool-loop margin).
+// that never renders in colour (no Kind::Color producer) defines
+// SOLIDE_NO_COLOR_EINK to drop it and render colour requests as B/W instead — reclaiming
+// a large CONTIGUOUS internal-SRAM block (helps fragmentation).
 static GxEPD2_3C<GxEPD2_290_C90c, GxEPD2_290_C90c::HEIGHT>
     colorDisp(GxEPD2_290_C90c(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 #endif
@@ -190,7 +197,7 @@ static void ensureBW() {
   bwDisp.epd2.clearRedRAM();
   activeMode = MODE_BW;
 }
-#ifndef NIMBUS_NO_COLOR_EINK
+#ifndef SOLIDE_NO_COLOR_EINK
 static void ensureColor() {
   if (activeMode == MODE_COLOR) return;
   colorDisp.init(115200, true, 50, false, epdSPI, epdSPISettings);
@@ -388,10 +395,10 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
       } while (bwDisp.nextPage());
     }
   } else {
-#ifdef NIMBUS_NO_COLOR_EINK
+#ifdef SOLIDE_NO_COLOR_EINK
     // colour instance dropped for SRAM — render the colour request in B/W (red plane
-    // merged to black), identical to the fast path above. Never hit on Nimbus (no
-    // Kind::Color producer); the fallback exists only so this can't crash if one appears.
+    // merged to black), identical to the fast path above. Never hit on a build with no
+    // Kind::Color producer; the fallback exists only so this can't crash if one appears.
     ensureBW();
     bwDisp.setFullWindow();
     bwDisp.firstPage();
