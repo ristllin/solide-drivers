@@ -3,6 +3,59 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.4.0] — 2026-08-10
+
+### Added
+- **`solide::display_tft` + `solide::touch`** — a second display/input pair: 2.8"
+  ILI9341 colour TFT (240×320) + XPT2046 resistive touch, as an alternative to
+  the e-paper + encoder. `solide::begin()` chooses the fitted pair (defaulting
+  to the e-paper); the self-test checks the pair that is actually FITTED.
+  Includes: landscape geometry with a runtime flip, a reset-free `rearm()`
+  (also clears partial mode, inversion and scroll), `healthy()` panel-register
+  self-check to detect a silently-reset panel, a direct pixel-path check (GRAM
+  round-trip + full-frame readback), backlight-PWM attach verification,
+  bounce-buffered blit + panel readback helpers, atomic touch-calibration
+  read/write, and touch axes rotated to match the landscape panel with
+  shared-MISO diagnostics.
+- **E-paper partial (differential) refresh** for `requestBitmap` — flash-free
+  bitmap updates.
+- **`SOLIDE_NO_COLOR_EINK` build flag** — drops the unused 3-colour e-ink
+  instance (~9.6 KB of contiguous internal SRAM) and renders colour requests as
+  B/W. `NIMBUS_NO_COLOR_EINK` is kept as a working alias.
+
+### Fixed
+- **E-paper de-ghosting**: red RAM cleared on B/W-mode entry and blanked inside
+  the ghost-clear itself (fixes the stuck-red 3-colour panel after a
+  ghost-clear); the ghost-clear now uses B/W inversion flashes instead of the
+  slow OTP waveform.
+- **Onboard RGB LED cleared at boot** — it shares a pin with touch-CS and was
+  never told to go dark, so it sat lit from the bootloader on.
+- **Audio**: the shared speaker TX channel is serialised with a recursive mutex.
+
+## [0.3.1] — 2026-07-15
+
+### Fixed
+- **Input: encoder A/B swapped** — the knob turned the wrong way on this wiring
+  (owner field report). One decode point flips menu + cursor together.
+
+## [0.3.0] — 2026-07-15
+
+First tag carrying the 0.2.1 audio changes below (0.2.1 was a CHANGELOG entry
+that never got its own tag), plus:
+
+### Added
+- **Audio: master playback volume** — `setVolume`/`getVolume`.
+- **Battery: pack-voltage sensing driver** (ADC1 divider) + selftest check +
+  `Board.batt` pin entry.
+- **Storage: `end()`** — unmounts the SD and clears the mount latch.
+- **Display: true full-update (ghost-clear) path** for `requestBitmap`, with the
+  busy timeout raised so the full update can finish.
+
+### Changed
+- **Input: long-press threshold** raised 400 → 600 ms.
+- **Ring: a lone segment renders as an arc**, not a full circle (the layout
+  reserves a gap).
+
 ## [0.2.1] — 2026-07-11
 
 ### Changed

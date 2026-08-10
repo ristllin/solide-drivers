@@ -14,7 +14,7 @@ board_upload.flash_size = 16MB
 board_build.partitions = default_16MB.csv
 build_flags = -DBOARD_HAS_PSRAM -DARDUINO_USB_CDC_ON_BOOT=1 -DARDUINO_USB_MODE=1 -DSOLIDE_BOARD=solide_s3
 lib_deps =
-    symlink://../solide-drivers          ; or: https://github.com/ristllin/solide-drivers.git#v0.1.0
+    symlink://../solide-drivers          ; or: https://github.com/ristllin/solide-drivers.git#v0.4.0
 ```
 The package's own dependencies (Adafruit NeoPixel, GxEPD2, ArduinoJson) resolve
 transitively — you don't restate them.
