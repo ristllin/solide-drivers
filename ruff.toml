@@ -1,0 +1,5 @@
+# Lint config for tools/ (bench/console scripts, not a Python library).
+# Keep the gate at pyflakes + pycodestyle errors — real breakage, not style
+# churn on serial-console loops that legitimately catch broad exceptions.
+[lint]
+select = ["E4", "E7", "E9", "F"]

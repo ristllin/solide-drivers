@@ -1,0 +1,6 @@
+# gitleaks config — used by the pre-commit hook. This repo is a hardware-only
+# board-support package: it should never contain a credential of any kind.
+# Keep this file minimal; add an allowlist entry only for an audited,
+# intentionally-committed fixture (with a comment saying why).
+[extend]
+useDefault = true

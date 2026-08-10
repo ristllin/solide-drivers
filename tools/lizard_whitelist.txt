@@ -1,0 +1,13 @@
+# lizard baseline whitelist — CURRENT offenders of CCN<=15 / length<=120 /
+# args<=6, forgiven so the pre-commit gate passes today while holding NEW
+# code to the thresholds.
+# Format: <file>:<function> (lizard -W). Remove a line after refactoring its
+# function; never add one for NEW code.
+src/portable/menu_fsm.cpp:solide::menu::Menu::onClick
+src/device/selftest.cpp:solide::selftest::run
+src/device/audio.cpp:solide::audio::loopbackSelfTest
+src/device/display.cpp:renderMenu
+src/device/display.cpp:renderBitmap
+src/device/display.cpp:enqueue
+src/device/display.cpp:solide::display::requestBitmap
+src/device/leds.cpp:solide::leds::renderSeg

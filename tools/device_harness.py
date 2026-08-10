@@ -5,6 +5,7 @@ lines. Trimmed from the classic Nuage-Solide DeviceHarness — all HTTP/web mach
 dropped (this package is hardware-only; the serial TEST protocol is the whole
 interface). Used by test_device/ (pytest) and usable interactively.
 """
+
 import glob
 import threading
 import time
@@ -13,16 +14,27 @@ import serial  # pyserial
 
 # Substrings that indicate the firmware crashed — any of these in the log fails a test.
 CRASH_MARKERS = [
-    "rst:0x", "Guru Meditation", "guru meditation", "panic'ed", "Panic",
-    "abort() was called", "CORRUPT HEAP", "Stack canary", "LoadProhibited",
-    "StoreProhibited", "InstrFetchProhibited", "Backtrace:",
+    "rst:0x",
+    "Guru Meditation",
+    "guru meditation",
+    "panic'ed",
+    "Panic",
+    "abort() was called",
+    "CORRUPT HEAP",
+    "Stack canary",
+    "LoadProhibited",
+    "StoreProhibited",
+    "InstrFetchProhibited",
+    "Backtrace:",
 ]
 
 
 def find_port():
     """First likely ESP32-S3 USB-CDC serial device, or None."""
     ports = sorted(
-        glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
+        glob.glob("/dev/cu.usbmodem*")
+        + glob.glob("/dev/ttyACM*")
+        + glob.glob("/dev/ttyUSB*")
     )
     return ports[0] if ports else None
 
@@ -35,7 +47,7 @@ class DeviceHarness:
         if not self.port:
             raise RuntimeError("no serial device found")
         self.ser = serial.Serial(self.port, baud, timeout=0.2)
-        self._lines = []           # list[(monotonic_ts, line)]
+        self._lines = []  # list[(monotonic_ts, line)]
         self._lock = threading.Lock()
         self._stop = False
         self._t = threading.Thread(target=self._reader, daemon=True)

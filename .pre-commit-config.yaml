@@ -1,0 +1,47 @@
+# solide-drivers pre-commit gates (public-release prep).
+#
+# Deliberately NO clang-format hook: repo-wide reformatting would churn every
+# diff against the existing history. Formatting stays a human/code-review
+# concern for C++.
+#
+# docs/manifest.json is generated (tools/gen_manifest.py) — fixers touching it
+# would drift it from its generator, so it is excluded globally.
+exclude: |
+  (?x)^(
+    docs/manifest\.json
+  )$|.*\.bin$
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks   # uses the repo's .gitleaks.toml
+
+  - repo: local
+    hooks:
+      - id: lizard-complexity
+        name: lizard complexity (CCN<=15, len<=120, args<=6)
+        entry: lizard -C 15 -L 120 -a 6 -w -W tools/lizard_whitelist.txt
+        language: python
+        additional_dependencies: [lizard]
+        files: '^(src|include)/.*\.(cpp|h)$'
+        # tools/lizard_whitelist.txt baselines today's offenders so the gate
+        # passes now but holds NEW code to the thresholds.
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=600]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      - id: ruff-check
+        files: '^tools/.*\.py$'
+      - id: ruff-format
+        files: '^tools/.*\.py$'

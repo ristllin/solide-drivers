@@ -8,6 +8,7 @@ drives one TEST command on connect.
     python tools/solide_console.py              # just record
     python tools/solide_console.py --test all   # send 'TEST all' ~2 s after connect
 """
+
 import glob
 import os
 import sys
@@ -18,7 +19,9 @@ import serial  # pyserial
 
 def find_port():
     ps = sorted(
-        glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
+        glob.glob("/dev/cu.usbmodem*")
+        + glob.glob("/dev/ttyACM*")
+        + glob.glob("/dev/ttyUSB*")
     )
     return ps[0] if ps else None
 
@@ -57,8 +60,10 @@ def main():
                     sent = True
                 line = ser.readline()
                 if line:
-                    txt = "%s %s" % (time.strftime("%H:%M:%S"),
-                                     line.decode("utf-8", "replace").rstrip())
+                    txt = "%s %s" % (
+                        time.strftime("%H:%M:%S"),
+                        line.decode("utf-8", "replace").rstrip(),
+                    )
                     print(txt)
                     f.write(txt + "\n")
             except Exception:
