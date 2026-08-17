@@ -1,4 +1,4 @@
-# Build & wiring guide — Solide S3
+# Build & wiring guide - Solide S3
 
 How to physically assemble the device this package drives. Pin numbers are the
 canonical ones from `include/solide/boards/board_solide_s3.h` (also in
@@ -20,8 +20,8 @@ this page has the **module-by-module wiring + power + assembly**. Overview diagr
 | 2 | **18650 Li-ion cells** | wired in **series** = 2S |
 | 1 | **2S BMS with USB-C charge** | protection + balance + charging |
 | 1 | **DC-DC converter → 5 V** | from the 2S pack (~6–8.4 V) to a clean 5 V bus |
-| — | **battery-sense add-on:** 1× 220 kΩ, 1× 100 kΩ, 1× 100 nF | see [§ Battery sense](#battery-sense-add-on) |
-| — | wire, protoboard/PCB, JST connectors | |
+| - | **battery-sense add-on:** 1× 220 kΩ, 1× 100 kΩ | see [§ Battery sense](#battery-sense-add-on) |
+| - | wire, protoboard/PCB, JST connectors | |
 
 ## Power architecture
 
@@ -38,13 +38,13 @@ USB-C ─▶ 2S BMS ─▶ 2×18650 (series, ~6.0–8.4 V) ─▶ DC-DC ─▶ 5
   regulator makes the 3.3 V rail. USB-C on the BMS charges the pack.
 - **On USB (dev):** the DevKit runs from USB; the 5 V bus is only needed to light
   the ring / drive the amp.
-- **Every ground is common** — tie all GNDs together (cells, BMS, DC-DC, ESP32,
+- **Every ground is common** - tie all GNDs together (cells, BMS, DC-DC, ESP32,
   every module).
 
 > ⚠️ **The mic VCC is 3.3 V ONLY.** The mic VDD/data lines follow VCC, and
 > 5 V would damage the S3's input. Do **not** put the mic on the 5 V bus.
 
-## Wiring — module by module
+## Wiring - module by module
 
 ESP32 pins below are GPIO numbers. `3V3`/`5V`/`GND` are the power rails above.
 
@@ -90,9 +90,9 @@ WeAct silk is I²C-style but it is **SPI** (SDA=data, SCL=clock).
 | SW (2-pin) | → | GPIO **48** |
 | SW (2-pin, other) | → | **GND** |
 
-(Internal pull-ups are enabled in the driver — no external resistors needed.)
+(Internal pull-ups are enabled in the driver - no external resistors needed.)
 
-### Audio — MAX98357A I2S amp + INMP441/ICS-43434 I2S mic
+### Audio - MAX98357A I2S amp + INMP441/ICS-43434 I2S mic
 Two separate breakouts. The **mic VCC is 3.3 V only ⚠** (5 V damages the S3); the
 amp runs on 3.3 V as a status speaker (5 V bus for more volume).
 
@@ -124,17 +124,17 @@ BAT+ (2S pack +, before the DC-DC)
    │
   [ R1 220kΩ ]
    │
-   ├───────────────▶ GPIO 4  (ADC1)      ── optional 100 nF from node to GND
+   ├───────────────▶ GPIO 4  (ADC1)
    │
   [ R2 100kΩ ]
    │
   GND
 ```
-- **ADC pin:** GPIO **4** (free ADC1; GPIO 5 or 6 also work — avoid GPIO 18, now the
+- **ADC pin:** GPIO **4** (free ADC1; GPIO 5 or 6 also work - avoid GPIO 18, now the
   I2S mic WS and also an ADC2 pin that clashes with WiFi).
 - **Divider:** 220 k / 100 k → ÷3.2, so 8.4 V → ~2.6 V. Quiescent draw ≈ 26 µA.
 - **Read:** `analogReadMilliVolts(4) × 3.2` = pack volts; map to a rough SoC
-  (~8.4 V≈100 %, ~7.4 V≈50 %, ~6.4 V≈0 % — the Li-ion curve is flat mid-range and
+  (~8.4 V≈100 %, ~7.4 V≈50 %, ~6.4 V≈0 % - the Li-ion curve is flat mid-range and
   sags under load, so treat it as approximate). When the BMS trips on over-discharge
   the pack disconnects and you read 0.
 - A `solide::power` driver (`power::begin(4, 220, 100)`, `power::packVolts()`,
@@ -142,11 +142,11 @@ BAT+ (2S pack +, before the DC-DC)
 
 ## Assembly gotchas
 
-- **GPIO 33–37 are octal PSRAM** on the N16R8 — never route anything there. Also
+- **GPIO 33–37 are octal PSRAM** on the N16R8 - never route anything there. Also
   avoid 0/45/46 (strapping), 19/20 (USB), 43/44 (UART), 26–32 (flash).
 - **Common ground everywhere**, including the LED ring and the cells.
 - **Two separate SPI buses:** SD on FSPI (10/11/12/13), e-paper on HSPI
-  (38/39/40/41/42/47) — don't merge them.
+  (38/39/40/41/42/47) - don't merge them.
 - **LED logic is 3.3 V** into a 5 V-powered ring; it works in practice, but a 330 Ω
   series resistor on DIN (and a 1000 µF cap across the ring's 5 V/GND) improves
   reliability on long runs.

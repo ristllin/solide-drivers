@@ -11,7 +11,7 @@
     .warn { fill:#b12; font-size:11px; font-weight:700; }
   </style>
 
-  <text x="490" y="30" text-anchor="middle" class="tb" font-size="19">Solide S3 — wiring overview</text>
+  <text x="490" y="30" text-anchor="middle" class="tb" font-size="19">Solide S3 - wiring overview</text>
   <text x="490" y="50" text-anchor="middle" class="t" fill="#666">pins from board_solide_s3.h · full connection tables in build.md</text>
 
   <!-- MCU -->
@@ -60,7 +60,7 @@
   <text x="722" y="322" class="tb">Audio board</text>
   <text x="722" y="342" class="pin">spk BCLK7 LRCLK8 DIN17</text>
   <text x="722" y="360" class="pin">mic BCLK15 WS18 SD16</text>
-  <text x="722" y="380" class="warn">VCC 3.3V ONLY — 5V kills the S3</text>
+  <text x="722" y="380" class="warn">VCC 3.3V ONLY - 5V kills the S3</text>
   <text x="722" y="404" class="t" fill="#666">I2S TX + I2S RX</text>
   <line x1="710" y1="360" x2="590" y2="375" stroke="#3b6ea5" stroke-width="2"/>
   <text x="628" y="352" class="lbl" fill="#3b6ea5">I2S</text>
@@ -70,7 +70,7 @@
   <text x="372" y="582" class="tb">Battery sense (add-on)</text>
   <text x="372" y="602" class="pin">BAT+ ─[220k]─┬─[100k]─ GND</text>
   <text x="372" y="620" class="pin">            └─▶ GPIO 4 (ADC1)</text>
-  <text x="372" y="640" class="t" fill="#666">÷3.2 · 8.4V→2.6V · +100nF</text>
+  <text x="372" y="640" class="t" fill="#666">÷3.2 · 8.4V→2.6V</text>
   <text x="372" y="659" class="t" fill="#666">sense the PACK, not the 5V rail</text>
   <line x1="490" y1="560" x2="490" y2="452" stroke="#3b6ea5" stroke-width="2"/>
   <text x="498" y="510" class="lbl" fill="#3b6ea5">ADC 4</text>

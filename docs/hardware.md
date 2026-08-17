@@ -1,4 +1,4 @@
-# Hardware reference — Solide S3
+# Hardware reference - Solide S3
 
 The canonical, machine-readable version is [`manifest.json`](manifest.json) (generated
 from `include/solide/boards/board_solide_s3.h`, the pin source of truth). This page is
@@ -7,20 +7,20 @@ power + BOM assembly guide (with a [diagram](wiring.svg)).
 
 ## Board
 
-**ESP32-S3-DevKitC-1 N16R8** — dual-core Xtensa LX7 @ 240 MHz + FPU, **16 MB** QIO
+**ESP32-S3-DevKitC-1 N16R8** - dual-core Xtensa LX7 @ 240 MHz + FPU, **16 MB** QIO
 flash, **8 MB OCTAL (OPI) PSRAM**.
 
-### Reserved GPIOs — never assign
+### Reserved GPIOs - never assign
 | Pins | Use |
 |---|---|
 | 0, 45, 46 | strapping |
 | 19, 20 | native USB (D−/D+) |
 | 43, 44 | UART0 console |
 | 26–32 | SPI flash |
-| **33–37** | **OCTAL PSRAM — the N16R8 gotcha** |
+| **33–37** | **OCTAL PSRAM - the N16R8 gotcha** |
 | 48 | on-board RGB (repurposed here as the encoder switch) |
 
-Free spares: **3, 4, 5, 6, 9**. (GPIO 18 is now the I2S mic WS/LRCLK — no longer spare.)
+Free spares: **3, 4, 5, 6, 9**. (GPIO 18 is now the I2S mic WS/LRCLK - no longer spare.)
 
 ## Pin map
 
@@ -31,7 +31,7 @@ Free spares: **3, 4, 5, 6, 9**. (GPIO 18 is now the I2S mic WS/LRCLK — no long
 | **LED ring** WS2812B ×45 | RMT | DIN 21 | **5 V** power, 3.3 V logic | ~372 mA worst case @ brightness 30 |
 | **Encoder** EC11 | GPIO | A 1 · B 2 · SW 48 | 3.3 V | 3-pin side: A / common→GND / B. 2-pin side: switch |
 | **Speaker** I2S amp (MAX98357A) | I2S1 (std) | BCLK 7 · LRCLK 8 · DIN 17 | 3.3 V | Class-D, built-in thermal/over-current protection; amp needs the 5 V bus for volume |
-| **Mic** I2S MEMS (INMP441/ICS-43434) | I2S0 (std) | BCLK 15 · WS 18 · SD 16 | **3.3 V only ⚠** | 16 kHz/16-bit/mono. L/R→GND (left slot). VDD/data follow VCC — 5 V damages the S3 |
+| **Mic** I2S MEMS (INMP441/ICS-43434) | I2S0 (std) | BCLK 15 · WS 18 · SD 16 | **3.3 V only ⚠** | 16 kHz/16-bit/mono. L/R→GND (left slot). VDD/data follow VCC - 5 V damages the S3 |
 
 ## Power
 
@@ -47,16 +47,16 @@ won't light and the speaker won't drive audibly without the 5 V bus**.
 
 ## Refresh / timing
 - E-paper fast B/W: **~2.2 s** (`fastFull ≈ 2 212 000 µs`), via the custom WS_20_30 LUT.
-- E-paper 3-colour: **~18.5 s** (OTP waveform) — reserve for idle/art.
+- E-paper 3-colour: **~18.5 s** (OTP waveform) - reserve for idle/art.
 - LED ring: ~60 FPS render loop; no per-show RMT heap leak on IDF5.
 
 ## Battery sense (add-on)
 The device has no built-in battery gauge. To read pack charge, add a divider from
-the **2S pack** (6.0–8.4 V, *before* the DC-DC — the regulated 5 V stays flat and
+the **2S pack** (6.0–8.4 V, *before* the DC-DC - the regulated 5 V stays flat and
 tells you nothing) into a free ADC1 pin:
 
-`BAT+ → 220 kΩ → node → 100 kΩ → GND`, and `node → GPIO 4 (ADC1)` (÷3.2, 8.4 V→~2.6 V,
-optional 100 nF to GND). Read `analogReadMilliVolts(4) × 3.2` = pack volts → rough SoC.
+`BAT+ → 220 kΩ → node → 100 kΩ → GND`, and `node → GPIO 4 (ADC1)` (÷3.2, 8.4 V→~2.6 V).
+Read `analogReadMilliVolts(4) × 3.2` = pack volts → rough SoC.
 Full wiring + code pointer in [build.md](build.md#battery-sense-add-on); a
 `solide::power` driver is the planned home once it's wired.
 
