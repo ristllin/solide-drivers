@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate docs/manifest.json — pins are parsed from the canonical board header
+"""Regenerate docs/manifest.json - pins are parsed from the canonical board header
 so they can never drift from the code. Static metadata (buses, volts, timings,
 namespaces) lives here. Usage: python tools/gen_manifest.py
 """
@@ -101,7 +101,7 @@ def build(p):
                 "caveat": "shared VCC 3.3 V ONLY; 5 V damages the S3 (mic DATA follows VCC)",
             },
             # Alternative display: fitted INSTEAD of the e-paper, and it consumes
-            # the encoder pins (1/2/48), so a TFT board has no knob — touch is the
+            # the encoder pins (1/2/48), so a TFT board has no knob - touch is the
             # input device. Firmware NVS (screenModel) selects which pair binds.
             "display_tft": {
                 "namespace": "solide::display_tft",
@@ -120,7 +120,7 @@ def build(p):
                 "pins": {"tcs": p["tft"]["tcs"], "tirq": p["tft"]["tirq"]},
                 "volts": 3.3,
                 "max_spi_hz": 2000000,
-                "caveat": "far slower than the panel's 40 MHz — needs its own SPI transaction settings",
+                "caveat": "far slower than the panel's 40 MHz - needs its own SPI transaction settings",
             },
             "memory": {
                 "namespace": "solide::memory",

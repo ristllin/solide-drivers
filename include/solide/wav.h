@@ -17,7 +17,7 @@ struct WavInfo {
 
 // Parse a canonical RIFF/WAVE PCM header from the first `n` bytes. Walks chunks
 // until "data". Returns false on non-WAV, non-PCM, or truncation. Does not judge
-// channels/bit-depth — it reports them; the caller decides what it can play.
+// channels/bit-depth - it reports them; the caller decides what it can play.
 bool parseHeader(const uint8_t* buf, size_t n, WavInfo& out);
 
 // Write a 44-byte canonical PCM WAV header for `dataBytes` of audio into out[0..43].

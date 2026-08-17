@@ -19,7 +19,7 @@
 //
 // Extracted from the original firmware's display.cpp; the WS_20_30 waveform, the
 // GxEPD2_290_C90fast subclass, the word-wrap, and the render machinery are
-// preserved byte-for-byte. The app/branding "status screen" was removed — this
+// preserved byte-for-byte. The app/branding "status screen" was removed - this
 // layer exposes only generic primitives (requestText / requestBitmap / requestMenu).
 // ============================================================================
 
@@ -45,7 +45,7 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
       : GxEPD2_290_T94_V2(cs, dc, rst, busy) {}
 
   // When set for one render, use the panel's TRUE full-update waveform (the parent's
-  // refresh) instead of our fast custom LUT — the only path that actually CLEARS
+  // refresh) instead of our fast custom LUT - the only path that actually CLEARS
   // accumulated SSD1680 ghosting. The caller sets it around a firstPage/nextPage.
   bool forceFullUpdate = false;
 
@@ -54,14 +54,14 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
     if (forceFullUpdate) {
       // De-ghost round 3 (field 2026-07-16, owner saw red AGAIN with the red-RAM
       // blank in place): the panel's OTP full-update waveform is a 3-COLOUR
-      // waveform — it drives the RED PIGMENT through its phases as part of the
+      // waveform - it drives the RED PIGMENT through its phases as part of the
       // refresh ITSELF, regardless of RAM contents. There is no register recipe
       // that makes that waveform red-free; the previous rounds (clear 0x26 on
       // mode entry b8e6b85, clear 0x26 inside this branch bc8a562) fixed real
       // RAM pollution but could not stop the waveform's own red drive. So the
       // de-ghost NEVER runs the OTP waveform any more: it clears retention with
       // B/W INVERSION FLASHES on the proven fast register LUT (all-black then
-      // all-white, twice) — the standard retention-clearing technique — then
+      // all-white, twice) - the standard retention-clearing technique - then
       // falls through to render the content frame normally. Red is never
       // exercised, and the whole cycle is ~9 s instead of the OTP's ~18 s.
       forceFullUpdate = false;   // re-entrancy guard: writeScreenBuffer can route
@@ -70,13 +70,13 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
                                  // path, not loop back into this branch.
       clearRedRAM();   // keep the red plane blank regardless (partials rewrite 0x26)
       for (int cycle = 0; cycle < 2; ++cycle) {
-        writeScreenBuffer(0x00);   // all black (0x24 only — public parent helper)
+        writeScreenBuffer(0x00);   // all black (0x24 only - public parent helper)
         _fastFull();
         writeScreenBuffer(0xFF);   // all white
         _fastFull();
       }
       // The flashes overwrote the frame the page cycle had staged in 0x24, and
-      // GxEPD2_BW::nextPage will NOT refresh again after this returns — signal
+      // GxEPD2_BW::nextPage will NOT refresh again after this returns - signal
       // renderBitmap to run one more normal content pass on the clean glass.
       needContentRepaint = true;
       _initial_refresh = false;
@@ -85,7 +85,7 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
     _fastFull();
     _initial_refresh = false;
   }
-  // Set when a de-ghost flash cycle consumed the frame that was in RAM — the
+  // Set when a de-ghost flash cycle consumed the frame that was in RAM - the
   // caller must run one more normal render pass to put the content back on glass.
   bool needContentRepaint = false;
   void refresh(int16_t x, int16_t y, int16_t w, int16_t h) override {
@@ -115,7 +115,7 @@ class GxEPD2_290_C90fast : public GxEPD2_290_T94_V2 {
   // Clear the panel's RED RAM (0x26) to white. This is a 3-colour (B/W/RED) SSD1680:
   // the fast B/W path only writes the B/W RAM (0x24) and merges red->black, but a
   // COLOUR render (colorDisp) leaves real data in the red RAM. The ghost-clear uses
-  // the panel's TRUE full-update (OTP) waveform, which renders BOTH RAMs — so a stale
+  // the panel's TRUE full-update (OTP) waveform, which renders BOTH RAMs - so a stale
   // red plane paints RED and stays (the "screen goes red after a refresh" field bug).
   // Clearing red RAM to 0xFF on every B/W-mode entry guarantees B/W renders (incl.
   // ghost-clears) never resurrect a red plane. Writes the whole RAM, so it's correct
@@ -161,7 +161,7 @@ const unsigned char GxEPD2_290_C90fast::WS_20_30[159] PROGMEM = {
 
 // ---- optional build flag: drop the 3-colour instance -------------------------
 // SOLIDE_NO_COLOR_EINK is the canonical flag name. NIMBUS_NO_COLOR_EINK is kept
-// as a working alias for the original downstream consumer — defining either works.
+// as a working alias for the original downstream consumer - defining either works.
 #if defined(NIMBUS_NO_COLOR_EINK) && !defined(SOLIDE_NO_COLOR_EINK)
 #define SOLIDE_NO_COLOR_EINK
 #endif
@@ -172,7 +172,7 @@ static GxEPD2_BW<GxEPD2_290_C90fast, GxEPD2_290_C90fast::HEIGHT>
 #ifndef SOLIDE_NO_COLOR_EINK
 // The 3-colour instance carries its own ~9.6 KB framebuffer in internal SRAM. A build
 // that never renders in colour (no Kind::Color producer) defines
-// SOLIDE_NO_COLOR_EINK to drop it and render colour requests as B/W instead — reclaiming
+// SOLIDE_NO_COLOR_EINK to drop it and render colour requests as B/W instead - reclaiming
 // a large CONTIGUOUS internal-SRAM block (helps fragmentation).
 static GxEPD2_3C<GxEPD2_290_C90c, GxEPD2_290_C90c::HEIGHT>
     colorDisp(GxEPD2_290_C90c(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
@@ -246,7 +246,7 @@ static void wrapText(const String& text, int16_t maxW, std::vector<String>& out)
   for (size_t i = 0; i <= text.length(); i++) {
     char c = (i < text.length()) ? text[i] : '\n';
     unsigned char uc = (unsigned char)c;
-    // Drop bytes the ASCII GFX font can't render — UTF-8 high bytes (smart quotes,
+    // Drop bytes the ASCII GFX font can't render - UTF-8 high bytes (smart quotes,
     // em-dashes, emoji) and stray control chars; else a glyph lookup indexes past
     // the font table -> invalid read -> device reset.
     if (uc > 126) continue;
@@ -263,7 +263,7 @@ static void wrapText(const String& text, int16_t maxW, std::vector<String>& out)
 
 // ---- renderers ---------------------------------------------------------------
 
-// A titled text block — fast B/W: bold title (up to 2 lines) + wrapped body,
+// A titled text block - fast B/W: bold title (up to 2 lines) + wrapped body,
 // optional knob-scroll with a "[ click: return ]" footer.
 static void renderText(const String& title, const String& body,
                        int scrollOffset, bool scrollMode) {
@@ -311,7 +311,7 @@ static void renderText(const String& title, const String& body,
   } while (bwDisp.nextPage());
 }
 
-// Menu — fast B/W: bold title + items; selected row inverted. Packed string is
+// Menu - fast B/W: bold title + items; selected row inverted. Packed string is
 // "<selected>\x1f<title>\x1f<item0>\x1f<item1>...".
 static void renderMenu(const String& packed, bool full) {
   ensureBW();
@@ -366,7 +366,7 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
     // the only thing that wipes accumulated ghosting). The scheduler asks for it
     // every FullRefreshEveryN renders + on the long-idle failsafe.
     bwDisp.epd2.forceFullUpdate = fullClear;
-    // partial: the SSD1680's differential mode — updates changed pixels with NO
+    // partial: the SSD1680's differential mode - updates changed pixels with NO
     // invert flash (the flicker-free path the menu has always used). Every 10th
     // partial falls back to a fast full frame to bound ghost accumulation, same
     // counter pattern as renderMenu; a fullClear frame is always full.
@@ -396,7 +396,7 @@ static void renderBitmap(const uint8_t* black, const uint8_t* red, int16_t w, in
     }
   } else {
 #ifdef SOLIDE_NO_COLOR_EINK
-    // colour instance dropped for SRAM — render the colour request in B/W (red plane
+    // colour instance dropped for SRAM - render the colour request in B/W (red plane
     // merged to black), identical to the fast path above. Never hit on a build with no
     // Kind::Color producer; the fallback exists only so this can't crash if one appears.
     ensureBW();
@@ -467,7 +467,7 @@ static void enqueue(RType t, const String* a, const String* b, int16_t extra = 0
 namespace solide::display {
 
 bool begin() {
-  if (rq) return true;   // idempotent — a second call is a safe no-op (queue exists)
+  if (rq) return true;   // idempotent - a second call is a safe no-op (queue exists)
   // Bind the dedicated HSPI/SPI3 bus BEFORE the first init(). MISO is unused (-1):
   // the panel is write-only.
   epdSPI.begin(EPD_SCK, -1 /*MISO*/, EPD_MOSI, EPD_CS);
@@ -485,7 +485,7 @@ bool begin() {
   if (ok != pdPASS) {
     log_e("display: task create FAILED heap=%u max8=%u", ESP.getFreeHeap(),
           heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    vQueueDelete(rq);   // no consumer task — free the queue so enqueue() no-ops
+    vQueueDelete(rq);   // no consumer task - free the queue so enqueue() no-ops
     rq = nullptr;
     return false;
   }

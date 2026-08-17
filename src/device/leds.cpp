@@ -11,13 +11,13 @@ static constexpr int LED_COUNT = solide::kBoardSolideS3.led.count;
 
 // ----------------------------------------------------------------------------
 // S3 WS2812B ring driver. Two render layers over one ~60 FPS task:
-//   * single-ring Pattern (renderSingle) — boot/wifi/affirmation.
-//   * agent-status segments (renderAgents) — the ring:: allocator's live
+//   * single-ring Pattern (renderSingle) - boot/wifi/affirmation.
+//   * agent-status segments (renderAgents) - the ring:: allocator's live
 //     sessions, each arc animated by its status.
 //
 // Colour/brightness policy (per the Adafruit_NeoPixel gotchas): the per-segment
 // and per-animation brightness is baked INTO the pixel RGB (non-destructive),
-// and setBrightness() is called at most once per frame as a global cap — never
+// and setBrightness() is called at most once per frame as a global cap - never
 // per segment (it is a lossy in-place rescale).
 //
 // The render pacing is LED_FRAME_MS (~16 ms). The classic driver's 500 ms cap
@@ -42,10 +42,10 @@ static ring::Allocator  g_alloc;
 static portMUX_TYPE     g_mux = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t     g_task = nullptr;   // for stack high-water diagnostics
 
-// Raw-frame state (leds::showFrame / clearFrame — see leds.h "Three layers").
+// Raw-frame state (leds::showFrame / clearFrame - see leds.h "Three layers").
 // g_rawBuf is fixed at LED_COUNT; unused tail slots (count < LED_COUNT) are
 // kept zeroed so a short frame reads as "off" there, never stale data. Guarded
-// by g_mux like every other cross-task field here — same convention, not a
+// by g_mux like every other cross-task field here - same convention, not a
 // second lock.
 static bool     g_rawActive  = false;
 static uint32_t g_rawLastMs  = 0;
@@ -110,7 +110,7 @@ static void renderSingle(uint32_t t) {
 
     case Pattern::Rainbow: {
       // Smooth ambient cycle: phase advances continuously with millis(), so motion
-      // is fluid regardless of frame timing. The selected scheme colours it — the
+      // is fluid regardless of frame timing. The selected scheme colours it - the
       // full HSV rainbow (default) or a curated palette (ring::schemeColor).
       ring::Scheme sc = g_scheme;
       uint32_t offset = (t / 6) & 0xFFFF;
@@ -222,7 +222,7 @@ static void task(void*) {
     portENTER_CRITICAL(&g_mux);
     bool raw = g_rawActive;
     if (raw && (t - g_rawLastMs > LED_FRAME_STALE_MS)) {
-      // Caller stopped feeding frames — never freeze on stale pixels forever.
+      // Caller stopped feeding frames - never freeze on stale pixels forever.
       // Hand control back to the layers below, same as an explicit clearFrame().
       g_rawActive = false;
       raw = false;
@@ -242,14 +242,14 @@ static void task(void*) {
 // ---- public API -------------------------------------------------------------
 
 bool begin() {
-  if (g_task) return true;   // idempotent — a second call is a safe no-op
+  if (g_task) return true;   // idempotent - a second call is a safe no-op
   g_ring.begin();
   g_bright = (uint8_t)LED_BRIGHTNESS;
   g_ring.setBrightness(g_bright);
   g_ring.clear();
   g_ring.show();
   // The render task is the SOLE caller of g_ring.show(): if it fails to start
-  // the ring stays dark forever and nothing else notices — surface it. Stack is
+  // the ring stays dark forever and nothing else notices - surface it. Stack is
   // 6 KB: the RMT show() path + float envelopes (cosf) want headroom; watch the
   // actual high-water mark via stackHighWaterBytes() during bring-up.
   BaseType_t ok = xTaskCreatePinnedToCore(task, "leds", 6144, nullptr, 1, &g_task, 1);

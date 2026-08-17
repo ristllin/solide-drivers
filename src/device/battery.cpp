@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-// solide::battery — see battery.h. analogReadMilliVolts() uses the chip's eFuse
+// solide::battery - see battery.h. analogReadMilliVolts() uses the chip's eFuse
 // ADC calibration, so the divider ratio is the only board-specific constant.
 
 namespace solide {

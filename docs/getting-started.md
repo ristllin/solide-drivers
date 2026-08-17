@@ -17,7 +17,7 @@ lib_deps =
     symlink://../solide-drivers          ; or: https://github.com/ristllin/solide-drivers.git#v0.4.0
 ```
 The package's own dependencies (Adafruit NeoPixel, GxEPD2, ArduinoJson) resolve
-transitively — you don't restate them.
+transitively - you don't restate them.
 
 ## Minimal sketch
 
@@ -39,7 +39,7 @@ void loop() {
 ```
 
 You can also bring peripherals up individually (`display::begin()`, `leds::begin()`,
-`storage::begin()`, `memory::begin()`, `input::begin()`, `audio::begin()`) — each
+`storage::begin()`, `memory::begin()`, `input::begin()`, `audio::begin()`) - each
 returns `bool` and is safe to skip if you don't use it.
 
 ## Build / flash / test

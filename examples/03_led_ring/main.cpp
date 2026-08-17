@@ -1,4 +1,4 @@
-// solide-drivers example: the WS2812B ring — smooth patterns + colour schemes +
+// solide-drivers example: the WS2812B ring - smooth patterns + colour schemes +
 // agent-status segmentation. Needs the 5 V bus to light. Also a good check that
 // the modernized NeoPixel RMT path (IDF5) has no per-show heap leak: watch that
 // heap + the render-task stack high-water stay flat across the alive lines.
@@ -29,14 +29,14 @@ void loop() {
       leds::agentStatus(A, ring::Status::Running); leds::agentAccent(A, 128);
       leds::agentStatus(B, ring::Status::AwaitingApproval);
       leds::agentStatus(C, ring::Status::WaitingInput);
-      Serial.println("LED: agent scene — Running(comet) / AwaitingApproval(blink) / WaitingInput(breathe)");
+      Serial.println("LED: agent scene - Running(comet) / AwaitingApproval(blink) / WaitingInput(breathe)");
     }
   } else if (now - phaseAt > 12000) {
     agents = false; phaseAt = now;
     leds::agentClear();
     leds::setScheme((ring::Scheme)(((int)leds::scheme() + 1) % (int)ring::Scheme::COUNT));
     leds::show(leds::Pattern::Rainbow);
-    Serial.printf("LED: ambient cycle — scheme=%s\n", ring::schemeName(leds::scheme()));
+    Serial.printf("LED: ambient cycle - scheme=%s\n", ring::schemeName(leds::scheme()));
   } else if (now - sceneAt > 4000) {
     sceneAt = now;                                   // shuffle the scene a little
     leds::agentStatus(B, scene & 1 ? ring::Status::Done : ring::Status::AwaitingApproval);

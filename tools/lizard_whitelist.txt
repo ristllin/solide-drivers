@@ -1,4 +1,4 @@
-# lizard baseline whitelist — CURRENT offenders of CCN<=15 / length<=120 /
+# lizard baseline whitelist - CURRENT offenders of CCN<=15 / length<=120 /
 # args<=6, forgiven so the pre-commit gate passes today while holding NEW
 # code to the thresholds.
 # Format: <file>:<function> (lizard -W). Remove a line after refactoring its

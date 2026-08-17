@@ -28,7 +28,7 @@ static bool testLed() {
 static bool testEpd() {
   // ⚠ Test the panel that is actually BOUND. A board fitted with the colour TFT
   // never starts the e-paper task, so checking display::taskAlive() there
-  // reports FAIL for hardware that is absent by design — slandering healthy
+  // reports FAIL for hardware that is absent by design - slandering healthy
   // hardware, the same way the encoder row below did.
   if (display_tft::taskAlive()) {
     Serial.printf("RESULT epd PASS panel=tft taskAlive=1\n");
@@ -87,11 +87,11 @@ static bool testAudio() {
   const char* reason = "";
   if (!detected) {
     if (d.peak < 200 || (d.dcMean > 20000 || d.dcMean < -20000))
-      reason = " (MIC-DEAD: no PDM data on din — check GPIO16 DATA / GPIO15 CLK / mic module)";
+      reason = " (MIC-DEAD: no PDM data on din - check GPIO16 DATA / GPIO15 CLK / mic module)";
     else if (d.toneMag <= 2 * d.ctrlMag)
-      reason = " (SPEAKER/COUPLING: mic hears broadband noise but no 1kHz tone — check 5V amp bus reaches the speaker + acoustic path)";
+      reason = " (SPEAKER/COUPLING: mic hears broadband noise but no 1kHz tone - check 5V amp bus reaches the speaker + acoustic path)";
     else
-      reason = " (tone present but below detection floor — raise SPL or lower threshold)";
+      reason = " (tone present but below detection floor - raise SPL or lower threshold)";
   }
   Serial.printf("RESULT audio %s toneHz=1000 mag=%u ctrl=%u rms=%u peak=%u dcMean=%ld samples=%u%s\n",
                 detected ? "PASS" : "SKIP", (unsigned)d.toneMag, (unsigned)d.ctrlMag,
@@ -100,7 +100,7 @@ static bool testAudio() {
 }
 
 // Speaker-only: play an audible 1 kHz tone at high amplitude for ~1.2 s. No mic
-// involved — a HUMAN confirms whether the amp/5 V/speaker chain makes sound. This
+// involved - a HUMAN confirms whether the amp/5 V/speaker chain makes sound. This
 // bisects the loopback: if you hear this but `TEST audio` still SKIPs, the fault is
 // mic capture or acoustic coupling, not the speaker.
 static bool testSpk() {
@@ -124,7 +124,7 @@ static bool testMic() {
   const size_t N = 3200;   // 0.2 s @ 16 kHz per window
   int16_t* buf = (int16_t*)malloc(N * sizeof(int16_t));
   if (!buf) { Serial.println("RESULT mic FAIL alloc"); return false; }
-  Serial.println("mic monitor: tap the mic — RMS should jump (2 s)...");
+  Serial.println("mic monitor: tap the mic - RMS should jump (2 s)...");
   uint16_t maxPeak = 0; uint32_t t0 = millis();
   while (millis() - t0 < 2000) {
     size_t got = audio::recordToBuffer(buf, N, 250, nullptr);
@@ -143,7 +143,7 @@ static bool testMic() {
 }
 
 // Battery divider: PASS = fitted + plausible per-cell voltage. SKIP (PASS-with-
-// note) when the divider isn't fitted — an unfitted sense line is a valid build.
+// note) when the divider isn't fitted - an unfitted sense line is a valid build.
 static bool testBatt() {
   if (!battery::present()) {
     Serial.println("RESULT batt SKIP fitted=0 (no divider on batt.sense, or implausible read)");

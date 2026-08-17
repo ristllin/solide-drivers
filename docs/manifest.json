@@ -161,7 +161,7 @@
       },
       "volts": 3.3,
       "max_spi_hz": 2000000,
-      "caveat": "far slower than the panel's 40 MHz \u2014 needs its own SPI transaction settings"
+      "caveat": "far slower than the panel's 40 MHz - needs its own SPI transaction settings"
     },
     "memory": {
       "namespace": "solide::memory",

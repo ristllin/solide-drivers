@@ -2,12 +2,12 @@
 
 ## Two tiers, one repo
 
-- **`src/portable/`** — pure logic, no Arduino/ESP deps, compiled on the host by
+- **`src/portable/`** - pure logic, no Arduino/ESP deps, compiled on the host by
   `pio test -e native` (via `test_build_src`). This is where the decisions live and
   get unit-tested: `ring` (segment allocator + layout + animation math + palettes),
   `input` (quadrature decoder + button debounce), `menu` (FSM), `wav` (RIFF parse/
   build), `tone` (Goertzel + RMS).
-- **`src/device/`** — ESP32-only drivers that turn those decisions into hardware:
+- **`src/device/`** - ESP32-only drivers that turn those decisions into hardware:
   `display`, `leds`, `audio`, `storage`, `memory`, `input`, `selftest`, `board`.
 
 Public headers are all under `include/solide/`; consumers `#include <solide/…>`.
@@ -26,8 +26,8 @@ Public headers are all under `include/solide/`; consumers `#include <solide/…>
   `selftest` protocol. Task-backed drivers (display, leds, input) render/poll on a
   pinned FreeRTOS task; the public API is non-blocking and thread-safe.
 - **Dependency inversion:** `audio`/`storage`/`memory` take `fs::FS&` or use the SD
-  singleton — no hard-wired transport. `display` is content-agnostic
-  (`requestText`/`requestBitmap`/`requestMenu`) — no app/branding/network concepts.
+  singleton - no hard-wired transport. `display` is content-agnostic
+  (`requestText`/`requestBitmap`/`requestMenu`) - no app/branding/network concepts.
 - **Graceful degradation:** absent hardware (no SD card, no mic) returns
   `false`/`0`/`SKIP`, never crashes.
 

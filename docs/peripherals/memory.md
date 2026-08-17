@@ -1,4 +1,4 @@
-# solide::memory — persistent settings/state
+# solide::memory - persistent settings/state
 
 Two backends by size: small typed config on **NVS** (Arduino `Preferences`, survives
 reflash), larger JSON/blobs on **SD** under `/memory/`. Distinct from
@@ -23,7 +23,7 @@ bool   eraseState(const char* name);
 `examples/06_memory_kv` (persistent boot counter + JSON state).
 
 ## Limitations
-- **NVS keys must be ≤ 15 chars** (hardware limit) — longer keys are rejected.
+- **NVS keys must be ≤ 15 chars** (hardware limit) - longer keys are rejected.
 - The JSON/blob half needs a mounted SD card (call `storage::begin()` first); without a
   card it returns `false` while the NVS half keeps working (boot-critical config survives).
 - `clear()` wipes the whole NVS namespace (a settings factory-reset).

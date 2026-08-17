@@ -1,4 +1,4 @@
-// solide-drivers example: e-paper "hello world" — a titled text block + a mascot.
+// solide-drivers example: e-paper "hello world" - a titled text block + a mascot.
 // 3.3 V, no 5 V needed.
 #include <Arduino.h>
 #include <solide/display.h>

@@ -1,5 +1,5 @@
 // solide-drivers example: everything together. Brings up all peripherals, shows a
-// status screen + rainbow ring, and uses the encoder to drive the LEDs live —
+// status screen + rainbow ring, and uses the encoder to drive the LEDs live -
 // turn = brightness, click = next colour scheme, long-press = sleep art.
 // LED ring lights only with the 5 V bus; everything else runs on USB.
 #include <Arduino.h>

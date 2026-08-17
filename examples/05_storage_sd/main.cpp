@@ -1,4 +1,4 @@
-// solide-drivers example: SD storage — mount, write, read back, list, capacity.
+// solide-drivers example: SD storage - mount, write, read back, list, capacity.
 // 3.3 V. Needs a FAT32 microSD inserted (gracefully reports if absent).
 #include <Arduino.h>
 #include <solide/storage.h>

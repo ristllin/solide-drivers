@@ -13,14 +13,14 @@
 // RGB565 framebuffer (portable, host-tested), so all this owns is the init
 // sequence, the window/blit, and the backlight.
 //
-// The bus is SHARED with the XPT2046 touch controller (see touch.cpp) — hence
+// The bus is SHARED with the XPT2046 touch controller (see touch.cpp) - hence
 // SPI transactions with per-device settings rather than a single global speed.
 // The panel runs at 40 MHz; the touch controller cannot go near that.
 //
 // ⚠ THREADING: the blit runs on this file's render task while touch is read
 // from the main loop, so two tasks drive one bus. That is safe because Arduino's
 // spiTransaction()/spiEndTransaction() take a per-bus mutex (esp32-hal-spi.c),
-// which serialises the two — verified, not assumed. The visible cost is
+// which serialises the two - verified, not assumed. The visible cost is
 // latency, not corruption: a touch read issued mid-blit blocks until the frame
 // finishes (~31 ms at 40 MHz), which is far inside the 8 s task watchdog.
 // ============================================================================
@@ -38,17 +38,17 @@ constexpr int8_t TFT_BL   = solide::kBoardSolideS3.tft.bl;
 // 40 MHz is the ILI9341's documented write ceiling and what these modules run
 // at reliably; MODE0, MSB-first.
 // ⚠ Panel SPI clock. 40 MHz is the ILI9341's rated maximum and is fine on a
-// PCB — but this panel is wired with jumpers and three bridges made on the
+// PCB - but this panel is wired with jumpers and three bridges made on the
 // module (T_CLK/T_DIN/T_DO), which is a long, unterminated, unshielded stub.
 // Signal integrity, not the controller, is the limit there.
 //
 // Symptom when it is too fast, and it is a MISLEADING one: register reads (which
-// this driver does at 4 MHz) stay perfect, so the panel looks healthy — MADCTL
+// this driver does at 4 MHz) stay perfect, so the panel looks healthy - MADCTL
 // reads back correctly, the render task is alive, the backlight is on, the
-// framebuffer holds the right pixels — while the 40 MHz RAMWR burst never lands
+// framebuffer holds the right pixels - while the 40 MHz RAMWR burst never lands
 // and the glass shows white or black. Every software-side check passes.
 // Runtime-tunable so the ceiling can be found on real wiring without a reflash.
-// 40 MHz — the ILI9341's rated maximum, and MEASURED sound on this wiring:
+// 40 MHz - the ILI9341's rated maximum, and MEASURED sound on this wiring:
 // TFTHZ sweeps 64-pixel burst round-trips at 4/10/20/26/40 MHz and TFTFILL?
 // round-trips whole RGB frames through the real blit path, reading back the far
 // corners. Both report zero mismatches at 40. Running slower "for margin" would
@@ -140,13 +140,13 @@ void panelInit() {
 
 // Re-assert ONLY the mode state a panel reset would have lost: colour format,
 // memory access order, sleep-out and display-on. Deliberately NOT panelInit():
-// that pulses RESET and issues SWRESET, which BLANKS the panel — running it on a
+// that pulses RESET and issues SWRESET, which BLANKS the panel - running it on a
 // timer would flash the screen every few seconds. These four commands are
 // idempotent, take microseconds, and are invisible when the panel is already fine.
 //
 // Why this exists: the ILI9341 can lose its state without the ESP32 noticing (a
-// brownout on its 3V3 rail, ESD, a glitch on RESET). It then reverts to defaults —
-// sleeping, 18-bit pixel format — so the next pixel stream renders as nothing, and
+// brownout on its 3V3 rail, ESD, a glitch on RESET). It then reverts to defaults -
+// sleeping, 18-bit pixel format - so the next pixel stream renders as nothing, and
 // the panel sits WHITE while the firmware believes it is painted. Observed on
 // hardware 2026-07-29.
 void panelRearm() {
@@ -159,13 +159,13 @@ void panelRearm() {
   // ⚠ Also reset the display MODES, not just sleep/display-on.
   //
   // These are the states that blank or corrupt the picture while leaving MADCTL,
-  // GRAM, the render task and the backlight all reading perfectly healthy — the
+  // GRAM, the render task and the backlight all reading perfectly healthy - the
   // exact signature of the blank-screen fault, and invisible to every diagnostic
   // this driver has (RDDPM is unimplemented on this panel, so display state
   // cannot be read back at all).
-  //   NORON     — leaves PARTIAL mode, which shows a sliver and blanks the rest
-  //   INVOFF    — leaves inverted colour
-  //   VSCRSADD 0— rewinds a vertical scroll that would display the wrong region
+  //   NORON     - leaves PARTIAL mode, which shows a sliver and blanks the rest
+  //   INVOFF    - leaves inverted colour
+  //   VSCRSADD 0- rewinds a vertical scroll that would display the wrong region
   // All idempotent, all invisible on a healthy panel, all microseconds. Since
   // the fault cannot be detected, the recovery has to cover the possibilities
   // blindly rather than wait for a signal that will never come.
@@ -184,7 +184,7 @@ void blit(const uint16_t* fb) {
   digitalWrite(TFT_CS, LOW);
   setFullWindow();
   writeCmd(CMD_RAMWR);
-  // The framebuffer is already big-endian RGB565 — the panel's own wire order —
+  // The framebuffer is already big-endian RGB565 - the panel's own wire order -
   // so it goes out as raw bytes with no per-pixel work.
   tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(fb),
                     size_t(solide::display_tft::kW) * solide::display_tft::kH * 2);
@@ -225,7 +225,7 @@ bool begin() {
     // Arduino-ESP32 v3 LEDC API: attach picks the channel itself.
     // ⚠ CHECK the attach. Unchecked, a failure here makes every setBacklight()
     // a silent no-op while backlight() keeps reporting the percentage we asked
-    // for — so the diagnostics claim "backlight on" for a panel that is dark.
+    // for - so the diagnostics claim "backlight on" for a panel that is dark.
     // That is the same class of lie as reading the framebuffer and calling it
     // the glass, and it cost real time during the blank-screen investigation.
     g_blAttached = ledcAttach(TFT_BL, 5000 /*Hz*/, 8 /*bit*/);
@@ -240,13 +240,13 @@ bool begin() {
   }
   if (xTaskCreatePinnedToCore(renderTask, "tft", 4096, nullptr, 1, nullptr, 1) != pdPASS) {
     log_e("tft: task create FAILED heap=%u", ESP.getFreeHeap());
-    vQueueDelete(rq);   // no consumer — drop the queue so pushFrame() no-ops
+    vQueueDelete(rq);   // no consumer - drop the queue so pushFrame() no-ops
     rq = nullptr;
     return false;
   }
   // Set HERE, not as the task's first statement: the task runs at the same
   // priority on the same core as setup(), so it has not been scheduled yet when
-  // begin() returns — taskAlive() would read false on a perfectly healthy board
+  // begin() returns - taskAlive() would read false on a perfectly healthy board
   // and any self-test row asserting it would false-FAIL.
   g_taskAlive = true;
   return true;
@@ -280,7 +280,7 @@ uint32_t readReg(uint8_t reg, int nbytes) {
 // SDO pin, so reading the touch controller while this is asserted isolates the two
 // devices on the shared MISO line. If touch data appears only here, the panel is
 // not tri-stating and the bridge is a hardware conflict, not a firmware bug.
-// The caller MUST follow with reinit() — the panel is dead until it does.
+// The caller MUST follow with reinit() - the panel is dead until it does.
 void holdReset(bool asserted) {
   if (TFT_RST < 0) return;
   pinMode(TFT_RST, OUTPUT);
@@ -292,14 +292,14 @@ void reinit() { panelInit(); }
 
 // Is the panel still configured, or has it silently reset?
 //
-// RDDST's top byte mirrors MADCTL, and we KNOW what we wrote — so comparing it
+// RDDST's top byte mirrors MADCTL, and we KNOW what we wrote - so comparing it
 // against madctlFor() is a deterministic check, not a heuristic. A panel that
 // lost its state reverts to the 0x00 power-on default and fails this instantly.
 // Measured on hardware: 0x28 stable across reads on a healthy panel (bit 0 is
 // the scan-direction flag and toggles during refresh, hence the mask).
 //
 // ⚠ RDDPM (0x0A) would have been the obvious register, but it reads 0x00 on this
-// panel even when it is demonstrably working — unusable. RDDST does work.
+// panel even when it is demonstrably working - unusable. RDDST does work.
 bool healthy() {
   const uint8_t got = uint8_t(readReg(0x09, 4) >> 24);
   return (got & 0xFE) == (madctlFor(g_flip) & 0xFE);
@@ -331,7 +331,7 @@ int pixelRoundTrip(int n) {
   writeCmd(CMD_RAMWR);
   dcData();
   // ⚠ writeBytes, NOT a loop of transfer(). Per-byte transfers leave gaps between
-  // bytes, so they do not produce the sustained burst a real blit does — an
+  // bytes, so they do not produce the sustained burst a real blit does - an
   // earlier version of this test used them and reported a clean 40 MHz while the
   // actual 153 KB blit was the thing under suspicion. Measure the path you ship.
   uint8_t burst[128];
@@ -366,7 +366,7 @@ int pixelRoundTrip(int n) {
   return bad;
 }
 
-// Read one pixel back from anywhere on the panel (slow clock — RAMRD is slow).
+// Read one pixel back from anywhere on the panel (slow clock - RAMRD is slow).
 // Used to verify the FULL-FRAME path: the 64-pixel round-trip above only proves
 // the origin works, and an addressing fault would pass it while leaving most of
 // the screen untouched.
@@ -402,7 +402,7 @@ void setPanelHz(uint32_t hz) {
 // Blit a PSRAM framebuffer through an INTERNAL bounce buffer, a band at a time.
 //
 // ⚠ Why this exists: a 150 KB DMA burst sourced directly from PSRAM was measured
-// to RESET this panel — MADCTL 0x28 -> 0x00 — with nothing else running on the
+// to RESET this panel - MADCTL 0x28 -> 0x00 - with nothing else running on the
 // board. fill(), which sources from internal memory, never does. On the S3, PSRAM
 // is reached over the same external-memory bus the SPI DMA must arbitrate for, so
 // a long burst out of PSRAM is a materially different transaction from one out of
@@ -435,7 +435,7 @@ void rearm() { panelRearm(); }
 void setFlip(bool upsideDown) {
   if (g_flip == upsideDown) return;
   g_flip = upsideDown;
-  // MADCTL alone — no reset, so this is instant and does not blank the panel. The
+  // MADCTL alone - no reset, so this is instant and does not blank the panel. The
   // next full frame lands in the new orientation.
   if (rq) panelRearm();
 }
@@ -458,7 +458,7 @@ void setBacklight(uint8_t pct) {
   if (pct > 100) pct = 100;
   g_backlight = pct;
   if (TFT_BL < 0) return;                 // tied to 3V3: always on, nothing to do
-  if (!g_blAttached) return;              // no PWM channel — do not pretend
+  if (!g_blAttached) return;              // no PWM channel - do not pretend
   ledcWrite(TFT_BL, (uint32_t(pct) * 255) / 100);
 }
 
@@ -474,7 +474,7 @@ void fill(uint16_t colour565) {
   // Wait out any frame already going to the panel. The SPI HAL serialises the
   // two transactions so the BUS is safe either way, but two full-screen writes
   // interleaving at transaction granularity would put half of each on the
-  // panel — a visibly torn frame rather than a clean fill.
+  // panel - a visibly torn frame rather than a clean fill.
   while (g_busy) delay(1);
 
   // Swap to the panel's big-endian wire order, then push one row at a time so a

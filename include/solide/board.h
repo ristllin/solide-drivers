@@ -2,7 +2,7 @@
 #include <stdint.h>
 
 // ============================================================================
-// solide::Board — the device pin map as data.
+// solide::Board - the device pin map as data.
 //
 // The Solide device is a FIXED hardware build, but the pinout is expressed as a
 // constexpr struct (not bare #defines) so drivers read pins as data and a future
@@ -22,7 +22,7 @@ struct Board {
   // and are separated by their own chip selects; the panel needs miso only
   // because the touch controller reports coordinates on it. bl = backlight
   // (PWM-capable; -1 = tied to 3V3, always on). tirq = pen-down interrupt
-  // (-1 = poll). Fitting the TFT RELEASES the encoder pins — a device is wired
+  // (-1 = poll). Fitting the TFT RELEASES the encoder pins - a device is wired
   // for one or the other, and screenModel in firmware NVS selects which driver
   // binds at boot. sck = -1 when the TFT isn't fitted.
   struct { int8_t sck, mosi, miso, cs, dc, rst, bl, tcs, tirq; } tft;
@@ -33,7 +33,7 @@ struct Board {
   // Battery voltage sense: an ADC1 pin fed by a resistor divider from BAT+
   // (tapped BEFORE the DC-DC). dividerX100 = (Rtop+Rbot)/Rbot × 100 (320 = ÷3.2);
   // cells = series Li-ion count (pack mV ÷ cells = per-cell mV). sense = -1
-  // when the divider isn't fitted — battery::begin() then reports absent.
+  // when the divider isn't fitted - battery::begin() then reports absent.
   struct { int8_t sense; uint16_t dividerX100; uint8_t cells; } batt;
 };
 

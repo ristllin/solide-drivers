@@ -23,7 +23,7 @@ static void task(void*) {
   g_taskAlive = true;
   for (;;) {
     // A/B swapped (owner field report 2026-07-15): with the straight A,B order the
-    // knob's physical clockwise turned the cursor the WRONG way on this hardware —
+    // knob's physical clockwise turned the cursor the WRONG way on this hardware -
     // the EC11's wiring phase is inverted relative to the decode table. Swapping
     // the pins at THIS single read point flips every consumer (menu + cursor)
     // consistently; no downstream code changes.
@@ -42,7 +42,7 @@ static void task(void*) {
 }
 
 bool begin() {
-  if (q) return true;        // idempotent — a second call is a safe no-op
+  if (q) return true;        // idempotent - a second call is a safe no-op
   pinMode(ENC_A, INPUT_PULLUP);
   pinMode(ENC_B, INPUT_PULLUP);
   pinMode(ENC_SW, INPUT_PULLUP);

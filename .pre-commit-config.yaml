@@ -4,7 +4,7 @@
 # diff against the existing history. Formatting stays a human/code-review
 # concern for C++.
 #
-# docs/manifest.json is generated (tools/gen_manifest.py) — fixers touching it
+# docs/manifest.json is generated (tools/gen_manifest.py) - fixers touching it
 # would drift it from its generator, so it is excluded globally.
 exclude: |
   (?x)^(

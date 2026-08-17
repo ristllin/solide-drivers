@@ -2,7 +2,7 @@
 #include <stdint.h>
 
 // ============================================================================
-// solide::battery — pack-voltage sensing via an ADC1 resistor divider.
+// solide::battery - pack-voltage sensing via an ADC1 resistor divider.
 //
 // Reads the eFuse-calibrated millivolt value on board().batt.sense (so raw
 // counts never matter), undoes the divider, and reports PACK and PER-CELL
@@ -13,7 +13,7 @@
 //
 // ⚠ ADC1 pins only (GPIO 1–10 on the S3): ADC2 reads garbage while WiFi is up.
 // The divider must keep the node ≤ ~3.1 V at max pack voltage (see
-// docs/hardware.md — 220k/100k = ÷3.2 puts a 2S 8.4 V pack at 2.63 V).
+// docs/hardware.md - 220k/100k = ÷3.2 puts a 2S 8.4 V pack at 2.63 V).
 // ============================================================================
 
 namespace solide {

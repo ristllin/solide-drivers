@@ -24,11 +24,11 @@ static const uint64_t MB = 1024ULL * 1024ULL;
 
 // ---- mount ----------------------------------------------------------------
 bool begin() {
-  if (g_ok) return true;   // already mounted — idempotent
+  if (g_ok) return true;   // already mounted - idempotent
 
   g_spi.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
   if (!SD.begin(SD_CS, g_spi)) {
-    Serial.println("SD: begin() failed — check CS=10 MOSI=11 CLK=12 MISO=13, "
+    Serial.println("SD: begin() failed - check CS=10 MOSI=11 CLK=12 MISO=13, "
                    "3V3 power, card inserted/FAT32. (running without SD)");
     g_ok = false;
     return false;

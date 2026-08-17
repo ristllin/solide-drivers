@@ -1,8 +1,8 @@
 // ============================================================================
-// M0 platform de-risk — NO solide drivers.
+// M0 platform de-risk - NO solide drivers.
 // Proves the pioarduino toolchain (Arduino-ESP32 3.x / ESP-IDF 5.x) builds,
 // USB-CDC serial comes up, a GPIO toggles, and PSRAM/flash report correctly on
-// the N16R8. If this doesn't build+run, nothing downstream can — this is the gate.
+// the N16R8. If this doesn't build+run, nothing downstream can - this is the gate.
 // ============================================================================
 #include <Arduino.h>
 

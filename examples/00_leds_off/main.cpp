@@ -1,4 +1,4 @@
-// solide-drivers: quiet firmware — brings the LED ring up and immediately turns it
+// solide-drivers: quiet firmware - brings the LED ring up and immediately turns it
 // OFF, then idles. Flashed to leave the board dark (so the ring never lights, even
 // when the 5 V bus is restored). 3.3 V.
 #include <Arduino.h>

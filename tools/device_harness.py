@@ -1,7 +1,7 @@
 """Serial-only device harness for solide-drivers.
 
 Drives the on-device self-test protocol over USB-CDC and asserts on the RESULT
-lines. Trimmed from the classic Nuage-Solide DeviceHarness — all HTTP/web machinery
+lines. Trimmed from the classic Nuage-Solide DeviceHarness - all HTTP/web machinery
 dropped (this package is hardware-only; the serial TEST protocol is the whole
 interface). Used by test_device/ (pytest) and usable interactively.
 """
@@ -12,7 +12,7 @@ import time
 
 import serial  # pyserial
 
-# Substrings that indicate the firmware crashed — any of these in the log fails a test.
+# Substrings that indicate the firmware crashed - any of these in the log fails a test.
 CRASH_MARKERS = [
     "rst:0x",
     "Guru Meditation",

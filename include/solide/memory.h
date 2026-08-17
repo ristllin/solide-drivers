@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 
 // ============================================================================
-// solide::memory — persistent settings/state store. Two backends by size:
+// solide::memory - persistent settings/state store. Two backends by size:
 //   * small typed config -> NVS (Arduino Preferences): survives reflash, atomic.
 //   * larger JSON / blobs -> SD under /memory/ (needs a mounted card).
 // Distinct from solide::storage (raw SD files). Graceful: the NVS half works with
@@ -14,7 +14,7 @@ namespace solide::memory {
 bool begin(const char* nsRoot = "solide");   // open the NVS namespace
 bool ok();                                    // NVS namespace open?
 
-// ---- typed key-value (NVS) — keys must be <= 15 chars (NVS limit) -----------
+// ---- typed key-value (NVS) - keys must be <= 15 chars (NVS limit) -----------
 String  getString(const char* key, const String& def = "");
 int32_t getInt(const char* key, int32_t def = 0);
 bool    getBool(const char* key, bool def = false);

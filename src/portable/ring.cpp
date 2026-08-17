@@ -86,7 +86,7 @@ int Allocator::upsert(uint32_t key, Status st, uint32_t nowMs) {
   if (i < 0) {                        // ring full: try to evict a lesser status
     int victim = lowestPriorityUsed();
     if (victim < 0 || priorityFor(st) <= priorityFor(slots_[victim].status))
-      return -1;                      // nobody less important — refuse
+      return -1;                      // nobody less important - refuse
     i = victim;
   }
 
@@ -151,7 +151,7 @@ int layout(int ledCount, int segCount, int gap, Span out[], int maxOut) {
 
   // n segments on a ring => n boundaries => n gaps (incl. last->first wrap). A lone
   // segment ALSO gets a gap now (was: filled the whole ring), so one session reads
-  // as an ARC, not a full circle — the caller passes a wider gap for n==1 to make
+  // as an ARC, not a full circle - the caller passes a wider gap for n==1 to make
   // the arc unmistakable (owner: "full circle makes no sense").
   int gapCount = n;
   int g = gap < 0 ? 0 : gap;

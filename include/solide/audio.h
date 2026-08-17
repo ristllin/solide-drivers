@@ -3,7 +3,7 @@
 #include <FS.h>
 
 // ============================================================================
-// solide::audio — I2S speaker (TX) + I2S mic (RX). Separate boards on Nimbus V0.1:
+// solide::audio - I2S speaker (TX) + I2S mic (RX). Separate boards on Nimbus V0.1:
 // MAX98357A amp (5 V bus for volume) + INMP441/ICS-43434 I2S MEMS mic (3.3 V ONLY:
 // the mic VDD/data lines follow VCC, 5 V would damage the S3). Rewritten on the
 // ESP-IDF 5 channel API (driver/i2s_std for both TX and RX); the PUBLIC API is
@@ -27,7 +27,7 @@ bool playPcm(const int16_t* mono, size_t sampleCount, uint32_t sampleRate);
 bool playWavFile(fs::FS& fs, const char* path);        // canonical 16-bit mono PCM WAV
 
 // Master playback attenuation (0.0..1.0), applied to EVERY speaker output (SFX,
-// TTS, beep — they all funnel through the mono->stereo write). The MAX98357A's
+// TTS, beep - they all funnel through the mono->stereo write). The MAX98357A's
 // fixed ~9 dB gain overdrives a small speaker at full scale, so full-scale WAVs
 // (e.g. game voice rips) clip/distort; keep this below 1.0. Persists until
 // changed; the acoustic loopback self-test forces full scale internally.
@@ -49,8 +49,8 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
 //
 // Diagnostics that separate the failure modes on hardware (all optional via
 // `diagOut`):
-//   toneMag  Goertzel @ toneHz         — the loopback tone energy
-//   ctrlMag  Goertzel @ toneHz+2100 Hz — control band the speaker never plays;
+//   toneMag  Goertzel @ toneHz         - the loopback tone energy
+//   ctrlMag  Goertzel @ toneHz+2100 Hz - control band the speaker never plays;
 //            a REAL tone gives toneMag >> ctrlMag, broadband hash/ambient gives
 //            toneMag ~= ctrlMag (so ratio ~1 == "mic hears noise, not the tone")
 //   rms      overall level (mic alive vs silent)

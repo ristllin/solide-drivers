@@ -1,4 +1,4 @@
-# solide::input — EC11 encoder + button (+ solide::menu)
+# solide::input - EC11 encoder + button (+ solide::menu)
 
 A 1 kHz poll task feeds the host-tested quadrature decoder + button debounce and
 queues events; drain them from your loop. The portable `solide::menu` FSM turns
@@ -28,5 +28,5 @@ namespace solide::menu {
 
 ## Limitations
 - 4 quarter-steps per detent (EC11 standard). Long-press default 400 ms.
-- SW is on GPIO48 (the board's on-board RGB pin, repurposed). Event queue holds 16 —
+- SW is on GPIO48 (the board's on-board RGB pin, repurposed). Event queue holds 16 -
   drain it each loop or events drop.

@@ -11,7 +11,7 @@ using namespace solide;
 void setup() {
   Serial.begin(115200);
   delay(1500);
-  Serial.println("solide-drivers: self-test console — send 'TEST all' or 'INFO'");
+  Serial.println("solide-drivers: self-test console - send 'TEST all' or 'INFO'");
   BeginResult b = begin();
   Serial.printf("begin: display=%d leds=%d storage=%d memory=%d input=%d\n",
                 b.display, b.leds, b.storage, b.memory, b.input);

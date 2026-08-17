@@ -1,4 +1,4 @@
-# solide::audio — I2S speaker + I2S mic
+# solide::audio - I2S speaker + I2S mic
 
 Rewritten on the ESP-IDF 5 channel API: `driver/i2s_std` (speaker TX, I2S1) +
 `driver/i2s_std` (mic RX, I2S0). Independent channels, so play + record run
@@ -24,12 +24,12 @@ bool loopbackSelfTest(uint16_t toneHz = 1000, uint32_t* magOut = nullptr, uint16
 `examples/07_audio_play_record` (beeps + record + level).
 
 ## Limitations & status
-- **3.3 V ONLY** on the mic — the mic VDD/data lines follow VCC; 5 V damages the S3.
+- **3.3 V ONLY** on the mic - the mic VDD/data lines follow VCC; 5 V damages the S3.
   The amp needs the **5 V bus** for audible volume.
 - Mic is fixed 16 kHz / 16-bit / mono. Speaker rate is per call; mono only (duplicated).
 - **TX validated** on hardware (Arduino 3.3.9 / IDF 5.5.4). **Mic capture is a hardware
-  check pending** — a constant `-30935` reading means "no data on the mic data line"
+  check pending** - a constant `-30935` reading means "no data on the mic data line"
   (ESP-IDF #12382, from the PDM-era mic); verify GPIO16 SD / GPIO15 BCLK / GPIO18 WS
   wiring + the mic module.
 - `loopbackSelfTest` is code-complete + crash-safe but its acoustic threshold is
-  unvalidated until the mic works + 5 V is on — tune `mag > 1000` then.
+  unvalidated until the mic works + 5 V is on - tune `mag > 1000` then.

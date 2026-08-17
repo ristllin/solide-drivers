@@ -1,4 +1,4 @@
-# solide::leds — WS2812B ring (45 px)
+# solide::leds - WS2812B ring (45 px)
 
 A ~60 FPS render task drives the ring. Two layers: single-ring **patterns** and
 per-session **status segments** (backed by the host-tested `solide::ring` core).

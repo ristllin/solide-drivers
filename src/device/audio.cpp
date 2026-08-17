@@ -11,7 +11,7 @@
 // IDF5 channel-API rewrite of the legacy-I2S driver. Every config struct is
 // initialized FIELD-BY-FIELD (not via the IDF I2S_*_DEFAULT_CONFIG macros): those
 // macros use C designated initializers whose field order differs from the struct
-// order, which is an error under C++ — so we set members explicitly. All numeric
+// order, which is an error under C++ - so we set members explicitly. All numeric
 // config, the mono->stereo duplication, the odd-byte carry, the 60 ms mic settle,
 // and the [8k,48k] clamp are preserved exactly from the proven original.
 
@@ -32,7 +32,7 @@ static i2s_chan_handle_t g_rx = nullptr;
 // The TX channel is shared by independent tasks (SFX playback task, orchestrator
 // turn task, web beep, self-test): unserialized, a concurrent spkOpen tears down
 // g_tx under the other writer and its spkWrite silently no-ops. One RECURSIVE
-// mutex is held from spkOpen until the matching spkClose — whole-clip granularity
+// mutex is held from spkOpen until the matching spkClose - whole-clip granularity
 // (clips are short), and playPcm/playWavFile/loopbackSelfTest all compose from
 // that pair, so every playback path serializes at this single seam. Recursive
 // because spkOpen re-opens (calls spkClose) and loopbackSelfTest nests an open
@@ -44,7 +44,7 @@ static bool     s_haveCarry = false;
 // Master playback gain as fixed-point Q8 (256 == unity). Default 0.5: the amp +
 // small speaker overdrive well before full scale. Integer scale in the hot loop
 // (S3 has an FPU but this stays cheap + exact); gain <= 256 so mono[i]*g >> 8
-// can never overflow int32 or exceed int16 range — no clamp needed.
+// can never overflow int32 or exceed int16 range - no clamp needed.
 static int32_t  s_vol256    = 128;
 
 void  setVolume(float v) { s_vol256 = (int32_t)((v < 0.f ? 0.f : v > 1.f ? 1.f : v) * 256.f + 0.5f); }
@@ -188,12 +188,12 @@ bool playWavFile(fs::FS& fs, const char* path) {
   return true;
 }
 
-// ---- mic (RX / i2s_std — INMP441 / ICS-43434) --------------------------------
+// ---- mic (RX / i2s_std - INMP441 / ICS-43434) --------------------------------
 // The INMP441/ICS-43434 emit 24-bit PCM MSB-first, left-justified in a 32-bit I2S
 // slot (Philips), L/R strapped to GND = LEFT slot. We clock the full 32-bit slot
 // but tell the driver the DATA is 16-bit: it hands back the TOP 16 bits (the loud
 // MSBs, no post-shift), so `recordToBuffer`/`recordToFile` keep emitting 16 kHz /
-// 16-bit mono PCM byte-for-byte — the public contract (kMicSampleRate/BitsPerSample)
+// 16-bit mono PCM byte-for-byte - the public contract (kMicSampleRate/BitsPerSample)
 // and every caller are unchanged. These mics have an internal DC-blocking HPF, so
 // the PDM `hp_en` filter is not needed. Mic RX = I2S_NUM_0, independent of the
 // speaker TX (I2S_NUM_1), so record + play run concurrently (loopbackSelfTest).
@@ -284,10 +284,10 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
 
 // ---- acoustic loopback self-test --------------------------------------------
 // TX (I2S1) + PDM-RX (I2S0) are independent, so a play task can run while the
-// caller records. NOTE: unvalidated as of the initial build — needs the 5 V amp
+// caller records. NOTE: unvalidated as of the initial build - needs the 5 V amp
 // bus + a working mic; the detection threshold is a starting point to tune on
 // real hardware.
-// The play task only WRITES to an already-open TX channel — it never allocates a
+// The play task only WRITES to an already-open TX channel - it never allocates a
 // channel, so it can't race the RX allocation. Both channels are opened (and
 // closed) sequentially by the caller below.
 struct LbCtx { const int16_t* tone; size_t n; volatile bool done; };
@@ -321,7 +321,7 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
     tone[i] = (int16_t)(24000.0f * sinf(2.0f * (float)M_PI * toneHz * (float)i / (float)rate));
 
   // Open BOTH channels here, sequentially (no concurrent i2s_new_channel). The
-  // play task then only writes TX while this task reads RX — real full duplex.
+  // play task then only writes TX while this task reads RX - real full duplex.
   bool ok = false;
   float mag = 0.0f; uint16_t rr = 0;
   float ctrlMag = 0.0f; uint16_t pk = 0; int32_t mean = 0; size_t captured = 0;

@@ -2,7 +2,7 @@
 #include <cstdint>
 
 // ============================================================================
-// ring:: — the portable, host-testable core of the LED-ring status compositor.
+// ring:: - the portable, host-testable core of the LED-ring status compositor.
 //
 // This is the ABSTRACTION for "allocate ring segments to agent sessions and show
 // each session's status via colour + pattern + brightness". It is deliberately
@@ -26,7 +26,7 @@ enum class Status : uint8_t {
   AwaitingApproval = 3,  // tool / permission gate ("requires approval")
   Done             = 4,  // turn finished
   Error            = 5,  // errored
-  Offline          = 6,  // session ended — frees the segment
+  Offline          = 6,  // session ended - frees the segment
 };
 
 // ---- Animation kinds (== notify Anim) --------------------------------------
@@ -35,7 +35,7 @@ enum class Anim : uint8_t {
   Solid   = 1,
   Breathe = 2,   // slow brightness sine
   Comet   = 3,   // a bright head sweeping a fading tail (motion = "working")
-  Blink   = 4,   // rapid on/off — grabs attention
+  Blink   = 4,   // rapid on/off - grabs attention
   Fade     = 5,  // solid -> fade toward a dim ember (settled "done")
 };
 
@@ -114,7 +114,7 @@ uint8_t cometFalloff(int distFromHead, int tail);      // 255>>dist within tail,
 
 // ---- Colour schemes (ambient "cycle" palettes) -----------------------------
 // The single-ring cycle pattern can render the full rainbow or a curated palette
-// for a nicer look. Schemes affect the AMBIENT cycle only — agent-status colours
+// for a nicer look. Schemes affect the AMBIENT cycle only - agent-status colours
 // stay semantic. Palette schemes are 4 RGB stops interpolated cyclically; Rainbow
 // / Pastel are HSV sweeps. Pure + host-tested; the caller applies gamma.
 struct RGB { uint8_t r, g, b; };

@@ -1,4 +1,4 @@
-// Host unit tests for solide::tone (Goertzel + RMS/peak) — the loopback DSP.
+// Host unit tests for solide::tone (Goertzel + RMS/peak) - the loopback DSP.
 #include <unity.h>
 #include "solide/tone.h"
 #include <cmath>

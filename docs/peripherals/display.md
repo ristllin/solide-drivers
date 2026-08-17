@@ -1,4 +1,4 @@
-# solide::display — e-paper
+# solide::display - e-paper
 
 WeAct 2.9" 3-colour (SSD1680), on a dedicated HSPI bus. All rendering runs on a
 render task (callers enqueue and never block). Two paths on one panel: fast B/W
@@ -22,10 +22,10 @@ void clear();
 `examples/02_display_hello` (text + mascot), `examples/04_display` (text/menu/art cycle).
 
 ## Limitations
-- The GFX font is **ASCII-only** — non-ASCII bytes are dropped (so LLM/agent output
+- The GFX font is **ASCII-only** - non-ASCII bytes are dropped (so LLM/agent output
   can't index past the font table and crash).
 - 3-colour full refresh is **~18.5 s**; use it only for idle/sleep/art. Interactive UI
   should stay on `requestText`/`requestMenu` (fast B/W).
 - Partial-refresh menus accumulate ghosting; a full refresh runs every 10th frame.
-- Hardware-only: no branding/status semantics here — compose a status screen from
+- Hardware-only: no branding/status semantics here - compose a status screen from
   `requestText`/`requestBitmap` in your app.

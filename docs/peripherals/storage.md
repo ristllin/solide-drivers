@@ -1,4 +1,4 @@
-# solide::storage — SD card (raw files)
+# solide::storage - SD card (raw files)
 
 FAT32 microSD on the FSPI/SPI2 bus (native IOMUX). A tiny stateful wrapper over the
 Arduino SD/FS core; every call is a safe no-op when no card is present.

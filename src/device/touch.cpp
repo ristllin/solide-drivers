@@ -11,7 +11,7 @@
 //
 // Shares the display's SPI bus (its T_CLK/T_DIN/T_DO are bridged onto the
 // panel's SCK/SDI/SDO on the module) with its own chip select. It is a SLOW
-// device — the datasheet tops out around 2 MHz against the panel's 40 — so
+// device - the datasheet tops out around 2 MHz against the panel's 40 - so
 // every read opens its own transaction at its own speed. Getting this wrong
 // does not fail loudly; it returns plausible-looking garbage coordinates.
 // ============================================================================
@@ -27,7 +27,7 @@ const SPISettings kTouchSPI(2000000, MSBFIRST, SPI_MODE0);
 // ⚠ The channel is bits 6:4, so read them from the byte, not from intuition:
 //   0xD0 = 1101_0000 -> A=101 = X position
 //   0x90 = 1001_0000 -> A=001 = Y position
-// These were transposed at first, which does NOT look broken — both axes stay
+// These were transposed at first, which does NOT look broken - both axes stay
 // in range, so every tap simply lands somewhere else on the panel.
 constexpr uint8_t CMD_X = 0xD0;   // A2..A0 = 101 -> X position
 constexpr uint8_t CMD_Y = 0x90;   // A2..A0 = 001 -> Y position
@@ -46,12 +46,12 @@ constexpr uint8_t kDebounce = 2;
 
 // Reads are rate-limited: polling SPI every loop iteration would starve the
 // bus the display is trying to use.
-constexpr uint32_t kPollIntervalMs = 20;   // 50 Hz — well above finger speed
+constexpr uint32_t kPollIntervalMs = 20;   // 50 Hz - well above finger speed
 
 bool                    g_present = false;
 solide::touch::Calibration g_cal;
 // ⚠ g_cal is written from the WEB task (a calibration save) and read from the
-// main loop, on a dual-core S3 — genuinely in parallel, not merely preempted.
+// main loop, on a dual-core S3 - genuinely in parallel, not merely preempted.
 // A 7-field struct assignment is not atomic, so an unguarded read can observe a
 // torn mix of old and new values and place a tap somewhere neither calibration
 // would. The lock is held only for the copy (a few dozen cycles), never across
@@ -69,7 +69,7 @@ uint8_t                 g_downCount = 0, g_upCount = 0;
 uint32_t                g_lastPollMs = 0;
 
 // The panel owns the bus; we borrow it (the module bridges T_CLK/T_DIN/T_DO
-// onto its SCK/SDI/SDO). display_tft::begin() must have run first — touch::begin()
+// onto its SCK/SDI/SDO). display_tft::begin() must have run first - touch::begin()
 // is ordered after it at the composition root.
 inline SPIClass& bus() { return *solide::display_tft::bus(); }
 
@@ -162,7 +162,7 @@ Point read() {
   }
 
   if (g_downCount >= kDebounce) {
-    // One consistent snapshot for the whole mapping — mixing fields from two
+    // One consistent snapshot for the whole mapping - mixing fields from two
     // calibrations would land the tap somewhere neither of them describes.
     const Calibration cal = calSnapshot();
     uint16_t ax = rx, ay = ry;

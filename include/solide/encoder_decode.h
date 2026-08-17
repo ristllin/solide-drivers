@@ -2,7 +2,7 @@
 #include <cstdint>
 
 // Portable, host-testable input logic for the EC11 rotary encoder + push button.
-// No Arduino dependencies — the hardware glue (ISR / digitalRead / millis) lives
+// No Arduino dependencies - the hardware glue (ISR / digitalRead / millis) lives
 // in src/hw/encoder.* and feeds these classes raw levels + a millis timestamp.
 namespace solide::input {
 

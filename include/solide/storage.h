@@ -2,19 +2,19 @@
 #include <Arduino.h>
 
 // ============================================================================
-// Nuage Solide S3 — microSD storage helper
+// Nuage Solide S3 - microSD storage helper
 //
 // A generic SPI microSD module (FAT32) on the dedicated FSPI/SPI2 bus, native
 // IOMUX pins (board.h: SD_CS=10 / SD_MOSI=11 / SD_SCK=12 / SD_MISO=13). This is
-// the genuinely-new S3 peripheral (the classic no-PSRAM board had no SD slot) —
+// the genuinely-new S3 peripheral (the classic no-PSRAM board had no SD slot) -
 // it backs device memory / logs / captured audio on the S3, where LittleFS on
 // 16 MB flash would be the cramped fallback.
 //
 // Style mirrors sys/fs.cpp (sysfs::): a tiny stateful module guarded by an
-// "available" flag, robust to a missing card or a failed mount — every call is
+// "available" flag, robust to a missing card or a failed mount - every call is
 // a no-op that returns false / "" / 0 when the card is absent, never a crash.
 //
-// Uses the Arduino-ESP32 built-in SD.h + FS.h — no extra lib_deps.
+// Uses the Arduino-ESP32 built-in SD.h + FS.h - no extra lib_deps.
 // ============================================================================
 namespace solide::storage {
 

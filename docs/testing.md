@@ -1,6 +1,6 @@
 # Testing
 
-Three layers — two you can run anywhere, one that needs the board.
+Three layers - two you can run anywhere, one that needs the board.
 
 ## 1. Native host tests (no hardware)
 
@@ -8,7 +8,7 @@ Three layers — two you can run anywhere, one that needs the board.
 pio test -e native
 ```
 Unit-tests the portable core (`solide::ring` / `input` / `menu` / `wav` / `tone`) on
-the host via Unity — allocator/layout/animation math, quadrature + debounce, the
+the host via Unity - allocator/layout/animation math, quadrature + debounce, the
 menu FSM, WAV parse/build, Goertzel tone detection. Runs in CI on every push
 (`.github/workflows/native-tests.yml`).
 
@@ -22,7 +22,7 @@ TEST <name>   -> RESULT <name> PASS|FAIL|SKIP <k=v>...   (name: led epd sd memor
 INFO          -> INFO board=... psramMB=... heap=... uptime=...
 ```
 `SKIP` = an optional/unpowered peripheral (e.g. no SD card, or audio without the 5 V
-amp) — not a failure. It's line-oriented so a human or an agent can drive it.
+amp) - not a failure. It's line-oriented so a human or an agent can drive it.
 
 ## 3. Device-in-the-loop tests (pytest)
 
@@ -40,5 +40,5 @@ the `TEST` protocol, and fails on any crash marker (`Guru Meditation`, `rst:0x`,
 
 ## Validate, don't eyeball
 The evidence is the `RESULT ... PASS` lines, the measured refresh timings, and a flat
-heap across frames — not a glance at the board. 5 V-dependent checks (LED lighting,
+heap across frames - not a glance at the board. 5 V-dependent checks (LED lighting,
 speaker audibility, the acoustic loopback) need the 5 V bus powered.

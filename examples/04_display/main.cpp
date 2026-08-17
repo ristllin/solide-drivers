@@ -1,4 +1,4 @@
-// solide-drivers example: the e-paper display — fast B/W text/menu + 3-colour art.
+// solide-drivers example: the e-paper display - fast B/W text/menu + 3-colour art.
 // 3.3 V, no 5 V needed. Watch the serial for GxEPD2 refresh timings
 // (fast B/W ~2.2 s, 3-colour ~18.5 s).
 #include <Arduino.h>
