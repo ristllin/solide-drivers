@@ -34,9 +34,15 @@ static fs::FS& card() {
 }
 // card-type/size accessors also via if constexpr, so the unused backend's
 // SD/SD_MMC methods are never ODR-used and a Spi board doesn't link SD_MMC.
-static uint8_t cardType()   { if constexpr (kSdmmc) return SD_MMC.cardType();  else return SD.cardType(); }
+// cardType() is public (declared in storage.h) - diagnostics need it even when
+// begin() failed; the others stay internal, surfaced via cardSizeMB/usedMB/freeMB.
+uint8_t cardType()          { if constexpr (kSdmmc) return SD_MMC.cardType();  else return SD.cardType(); }
 static uint64_t cardBytes() { if constexpr (kSdmmc) return SD_MMC.cardSize();  else return SD.cardSize(); }
 static uint64_t usedBytes() { if constexpr (kSdmmc) return SD_MMC.usedBytes(); else return SD.usedBytes(); }
+
+// Public accessor (storage.h) for callers that need to route their OWN file I/O
+// through the mounted card rather than this module's writeFile/readFile.
+fs::FS& activeFs() { return card(); }
 
 // ---- mount ----------------------------------------------------------------
 bool begin() {
