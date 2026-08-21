@@ -1,12 +1,12 @@
 #include "solide/board.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
 
-// Compile-time board selection. Add variants here as new Board constants keyed
-// off -DSOLIDE_BOARD. Today there is one board.
+// Runtime accessor. The compile-time selection lives in active_board.h
+// (activeBoard()); board() just exposes it to non-constexpr callers.
 namespace solide {
 
 const Board& board() {
-  return kBoardSolideS3;
+  return activeBoard();
 }
 
 }  // namespace solide
