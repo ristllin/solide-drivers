@@ -44,6 +44,16 @@ inline constexpr Board kBoardSolideS3 = {
   /* mic */ { /*bclk*/ 15, /*ws*/ 18, /*din*/ 16 },   // I2S std: INMP441/ICS-43434 (SCK=15, WS=18, SD=16, L/R->GND)
   // BAT+ -[220k]- GPIO4 -[100k]- GND (÷3.2), tapped before the DC-DC; 2S pack.
   /* batt */ { /*sense*/ 4, /*dividerX100*/ 320, /*cells*/ 2 },
+  // ---- capabilities ----
+  /* hasRing   */ true,                 // 45-LED WS2812B ring on led.din
+  /* touchKind */ TouchKind::ResistiveSpi, // XPT2046 (only in the tft build)
+  /* audioKind */ AudioKind::RawI2s,    // INMP441 mic + I2S amp
+  /* sdKind    */ SdKind::Spi,
+  /* tftInvert */ false,                // ILI9341 default (no INVON)
+  /* onboardRgb*/ 48,                   // DevKitC RGB, repurposed as enc.sw / touch cs
+  /* touchI2c  */ { /*sda*/ -1, /*scl*/ -1, /*intr*/ -1, /*rst*/ -1, /*addr*/ 0 }, // unused
+  /* codec     */ { -1, -1, -1, -1, -1, -1, -1, -1, /*addr*/ 0 },                   // unused
+  /* sdmmc     */ { -1, -1, -1, -1, -1, -1 },                                       // unused
 };
 
 }  // namespace solide

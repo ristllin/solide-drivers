@@ -1,9 +1,11 @@
 #include "solide/touch.h"
 
 #include <SPI.h>
+#include <Wire.h>
 
 #include "solide/board.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
+#include "solide/i2c_bus.h"
 #include "solide/display_tft.h"
 
 // ============================================================================
@@ -18,7 +20,7 @@
 
 namespace {
 
-constexpr int8_t T_CS = solide::kBoardSolideS3.tft.tcs;
+constexpr int8_t T_CS = solide::activeBoard().tft.tcs;
 
 // 2 MHz: inside the controller's limit with margin. A conversion is 3 bytes.
 const SPISettings kTouchSPI(2000000, MSBFIRST, SPI_MODE0);
@@ -120,27 +122,108 @@ int16_t mapClamped(uint16_t v, uint16_t lo, uint16_t hi, int16_t outMax, bool in
   return int16_t(p);
 }
 
+// ---- Capacitive (FT6336U over I2C) --------------------------------------
+// Selected by board data. FT6336U reports already-scaled PIXEL coordinates in
+// the panel's native (portrait) frame, so the resistive min/max calibration
+// does not apply here - only the swap/invert orientation flags do.
+constexpr bool    kCapacitive = solide::activeBoard().touchKind == solide::TouchKind::CapacitiveI2c;
+constexpr int8_t  TC_SDA  = solide::activeBoard().touchI2c.sda;
+constexpr int8_t  TC_SCL  = solide::activeBoard().touchI2c.scl;
+constexpr int8_t  TC_INT  = solide::activeBoard().touchI2c.intr;
+constexpr int8_t  TC_RST  = solide::activeBoard().touchI2c.rst;
+constexpr uint8_t TC_ADDR = solide::activeBoard().touchI2c.addr;
+
+// Read TD_STATUS + touch-point 1 X/Y (registers 0x02..0x06) in one transaction.
+// Returns native portrait coordinates for the first point, or false if untouched.
+bool ftReadPoint(uint16_t& x, uint16_t& y) {
+  Wire.beginTransmission(TC_ADDR);
+  Wire.write(uint8_t(0x02));
+  if (Wire.endTransmission(false) != 0) return false;   // repeated start
+  if (Wire.requestFrom(int(TC_ADDR), 5) != 5) return false;
+  const uint8_t status = Wire.read();   // 0x02 TD_STATUS (low nibble = #points)
+  const uint8_t xh = Wire.read();       // 0x03 P1_XH (0x0F = X[11:8])
+  const uint8_t xl = Wire.read();       // 0x04 P1_XL
+  const uint8_t yh = Wire.read();       // 0x05 P1_YH (0x0F = Y[11:8])
+  const uint8_t yl = Wire.read();       // 0x06 P1_YL
+  const uint8_t n = status & 0x0F;
+  if (n == 0 || n > 2) return false;    // 0 = up; >2 = glitch
+  x = (uint16_t(xh & 0x0F) << 8) | xl;
+  y = (uint16_t(yh & 0x0F) << 8) | yl;
+  return true;
+}
+
 }  // namespace
 
 namespace solide::touch {
 
 bool begin() {
-  if (T_CS < 0) return false;   // no touch panel on this board
-  pinMode(T_CS, OUTPUT);
-  digitalWrite(T_CS, HIGH);
-  // One throwaway conversion powers the controller's reference up; the very
-  // first read after cold boot is otherwise unreliable.
-  uint16_t x, y, z;
-  sampleRaw(x, y, z);
-  g_present = true;
-  return true;
+  if constexpr (kCapacitive) {
+    if (TC_SDA < 0 || TC_SCL < 0) return false;
+    if (TC_RST >= 0) {                      // hardware reset the controller
+      pinMode(TC_RST, OUTPUT);
+      digitalWrite(TC_RST, LOW);  delay(5);
+      digitalWrite(TC_RST, HIGH); delay(50);   // FT6336U boot time
+    }
+    if (TC_INT >= 0) pinMode(TC_INT, INPUT);   // polled, not IRQ-driven
+    solide::i2cEnsureBegun(TC_SDA, TC_SCL);    // shared with the codec
+    Wire.beginTransmission(TC_ADDR);           // ACK probe = present
+    g_present = (Wire.endTransmission() == 0);
+    return g_present;
+  } else {
+    if (T_CS < 0) return false;   // no touch panel on this board
+    pinMode(T_CS, OUTPUT);
+    digitalWrite(T_CS, HIGH);
+    // One throwaway conversion powers the controller's reference up; the very
+    // first read after cold boot is otherwise unreliable.
+    uint16_t x, y, z;
+    sampleRaw(x, y, z);
+    g_present = true;
+    return true;
+  }
 }
 
 bool present() { return g_present; }
 
 bool readRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
   if (!g_present) return false;
-  return sampleRaw(x, y, z);
+  if constexpr (kCapacitive) {
+    z = 0;
+    const bool hit = ftReadPoint(x, y);
+    if (hit) z = 1000;                 // capacitive has no pressure; report a flag
+    else { x = 0; y = 0; }
+    return hit;
+  } else {
+    return sampleRaw(x, y, z);
+  }
+}
+
+// Map a debounced-down hit to panel pixel coordinates + pressure, one
+// consistent calibration snapshot for the whole mapping - mixing fields from
+// two calibrations would land the tap somewhere neither of them describes.
+// Split out of read() to keep its own branching under the complexity gate.
+static Point mapHit(uint16_t rx, uint16_t ry, uint16_t rz, const Calibration& cal) {
+  uint16_t ax = rx, ay = ry;
+  if (cal.swapXY) { const uint16_t t = ax; ax = ay; ay = t; }
+  Point p;
+  p.down = true;
+  if constexpr (kCapacitive) {
+    // Already pixel coordinates in the panel-native frame; the flags rotate/
+    // mirror to the landscape surface. No min/max scaling (ranges already
+    // match after the swap), so the resistive cal fields are ignored.
+    int16_t X = int16_t(ax), Y = int16_t(ay);
+    if (cal.invertX) X = int16_t(solide::display_tft::kW - 1 - X);
+    if (cal.invertY) Y = int16_t(solide::display_tft::kH - 1 - Y);
+    if (X < 0) X = 0; else if (X > solide::display_tft::kW - 1) X = solide::display_tft::kW - 1;
+    if (Y < 0) Y = 0; else if (Y > solide::display_tft::kH - 1) Y = solide::display_tft::kH - 1;
+    p.x = X;
+    p.y = Y;
+    p.pressure = 1000;
+  } else {
+    p.x = mapClamped(ax, cal.minX, cal.maxX, solide::display_tft::kW - 1, cal.invertX);
+    p.y = mapClamped(ay, cal.minY, cal.maxY, solide::display_tft::kH - 1, cal.invertY);
+    p.pressure = rz;
+  }
+  return p;
 }
 
 Point read() {
@@ -151,7 +234,7 @@ Point read() {
   g_lastPollMs = now;
 
   uint16_t rx = 0, ry = 0, rz = 0;
-  const bool hit = sampleRaw(rx, ry, rz);
+  const bool hit = kCapacitive ? ftReadPoint(rx, ry) : sampleRaw(rx, ry, rz);
 
   if (hit) {
     g_upCount = 0;
@@ -162,17 +245,7 @@ Point read() {
   }
 
   if (g_downCount >= kDebounce) {
-    // One consistent snapshot for the whole mapping - mixing fields from two
-    // calibrations would land the tap somewhere neither of them describes.
-    const Calibration cal = calSnapshot();
-    uint16_t ax = rx, ay = ry;
-    if (cal.swapXY) { const uint16_t t = ax; ax = ay; ay = t; }
-    g_state.x = mapClamped(ax, cal.minX, cal.maxX,
-                           solide::display_tft::kW - 1, cal.invertX);
-    g_state.y = mapClamped(ay, cal.minY, cal.maxY,
-                           solide::display_tft::kH - 1, cal.invertY);
-    g_state.pressure = rz;
-    g_state.down = true;
+    g_state = mapHit(rx, ry, rz, calSnapshot());
   } else if (g_upCount >= kDebounce) {
     g_state = Point{};   // x/y back to -1: coordinates are meaningless when up
   }

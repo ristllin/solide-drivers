@@ -1,5 +1,5 @@
 #include "solide/display.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
 #include "solide/status_art.h"
 #include "esp_heap_caps.h"
 
@@ -24,12 +24,12 @@
 // ============================================================================
 
 // E-paper pins from the canonical board config.
-static constexpr int EPD_SCK  = solide::kBoardSolideS3.epd.sck;
-static constexpr int EPD_MOSI = solide::kBoardSolideS3.epd.mosi;
-static constexpr int EPD_CS   = solide::kBoardSolideS3.epd.cs;
-static constexpr int EPD_DC   = solide::kBoardSolideS3.epd.dc;
-static constexpr int EPD_RST  = solide::kBoardSolideS3.epd.rst;
-static constexpr int EPD_BUSY = solide::kBoardSolideS3.epd.busy;
+static constexpr int EPD_SCK  = solide::activeBoard().epd.sck;
+static constexpr int EPD_MOSI = solide::activeBoard().epd.mosi;
+static constexpr int EPD_CS   = solide::activeBoard().epd.cs;
+static constexpr int EPD_DC   = solide::activeBoard().epd.dc;
+static constexpr int EPD_RST  = solide::activeBoard().epd.rst;
+static constexpr int EPD_BUSY = solide::activeBoard().epd.busy;
 
 // Dedicated SPI bus for the e-paper (HSPI/SPI3), separate from the SD card.
 static SPIClass    epdSPI(HSPI);

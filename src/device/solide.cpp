@@ -1,5 +1,7 @@
 #include "solide/solide.h"
 
+#include "solide/boards/active_board.h"
+
 namespace solide {
 
 BeginResult begin(const BeginOptions& opt) {
@@ -20,7 +22,13 @@ BeginResult begin(const BeginOptions& opt) {
   // board, or override the button's INPUT_PULLUP on an e-paper board), so
   // there is no safe way to offer a live "turn the LED back on" toggle on this
   // hardware - only a one-shot, boot-time clear.
-  neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+  //
+  // Board-gated: only on boards that carry the DevKitC onboard RGB and later
+  // repurpose its pin. On an all-in-one board that pin may be a data line (e.g.
+  // GPIO48 is the SDMMC D2 line on the Freenove), so writing an LED frame there
+  // would glitch it - those boards set onboardRgbPin = -1 and skip this.
+  if constexpr (activeBoard().onboardRgbPin >= 0)
+    neopixelWrite(activeBoard().onboardRgbPin, 0, 0, 0);
   r.storage = storage::begin();   // mount SD first (memory's JSON half uses it)
   r.memory  = memory::begin();
   if (opt.tft) {

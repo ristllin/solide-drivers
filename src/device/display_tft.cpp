@@ -6,7 +6,7 @@
 #include <freertos/task.h>
 
 #include "solide/board.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
 
 // ============================================================================
 // ILI9341 over SPI. Deliberately minimal: the caller composes a finished
@@ -27,13 +27,17 @@
 
 namespace {
 
-constexpr int8_t TFT_SCK  = solide::kBoardSolideS3.tft.sck;
-constexpr int8_t TFT_MOSI = solide::kBoardSolideS3.tft.mosi;
-constexpr int8_t TFT_MISO = solide::kBoardSolideS3.tft.miso;
-constexpr int8_t TFT_CS   = solide::kBoardSolideS3.tft.cs;
-constexpr int8_t TFT_DC   = solide::kBoardSolideS3.tft.dc;
-constexpr int8_t TFT_RST  = solide::kBoardSolideS3.tft.rst;
-constexpr int8_t TFT_BL   = solide::kBoardSolideS3.tft.bl;
+constexpr int8_t TFT_SCK  = solide::activeBoard().tft.sck;
+constexpr int8_t TFT_MOSI = solide::activeBoard().tft.mosi;
+constexpr int8_t TFT_MISO = solide::activeBoard().tft.miso;
+constexpr int8_t TFT_CS   = solide::activeBoard().tft.cs;
+constexpr int8_t TFT_DC   = solide::activeBoard().tft.dc;
+constexpr int8_t TFT_RST  = solide::activeBoard().tft.rst;
+constexpr int8_t TFT_BL   = solide::activeBoard().tft.bl;
+// Some ILI9341 modules (e.g. the Freenove FNK0104AB, an "ILI9341_2" panel) are
+// wired so the picture is correct only with software inversion ON; the Solide
+// panel is not. Board data decides, so the Solide init stays byte-identical.
+constexpr bool   TFT_INVERT = solide::activeBoard().tftInvert;
 
 // 40 MHz is the ILI9341's documented write ceiling and what these modules run
 // at reliably; MODE0, MSB-first.
@@ -73,6 +77,7 @@ enum : uint8_t {
   CMD_SWRESET = 0x01, CMD_SLPOUT = 0x11, CMD_DISPON = 0x29,
   CMD_NORON   = 0x13,   // normal display mode ON (exits PARTIAL mode)
   CMD_INVOFF  = 0x20,   // inversion off
+  CMD_INVON   = 0x21,   // inversion on (needed by some ILI9341_2 modules)
   CMD_VSCRSADD = 0x37,  // vertical scroll start address
   CMD_CASET   = 0x2A, CMD_RASET  = 0x2B, CMD_RAMWR  = 0x2C,
   CMD_MADCTL  = 0x36, CMD_PIXFMT = 0x3A,
@@ -129,6 +134,8 @@ void panelInit() {
   const uint8_t pixfmt = 0x55;   // 16 bit/px, RGB565
   writeCmdData(CMD_PIXFMT, &pixfmt, 1);
 
+  if constexpr (TFT_INVERT) writeCmd(CMD_INVON);   // board-specific; absent on Solide
+
   writeCmd(CMD_SLPOUT);
   delay(120);
   writeCmd(CMD_DISPON);
@@ -170,7 +177,7 @@ void panelRearm() {
   // the fault cannot be detected, the recovery has to cover the possibilities
   // blindly rather than wait for a signal that will never come.
   writeCmd(CMD_NORON);
-  writeCmd(CMD_INVOFF);
+  if constexpr (TFT_INVERT) writeCmd(CMD_INVON); else writeCmd(CMD_INVOFF);
   const uint8_t scroll[2] = {0, 0};
   writeCmdData(CMD_VSCRSADD, scroll, 2);
   writeCmd(CMD_SLPOUT);
@@ -424,6 +431,34 @@ bool pushFrameChunked(const uint16_t* fb, uint16_t* bounce, int rowsPerChunk) {
     const size_t n = size_t(rows) * size_t(W);
     memcpy(bounce, fb + size_t(y) * size_t(W), n * 2);
     tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(bounce), n * 2);
+  }
+  digitalWrite(TFT_CS, HIGH);
+  tftSPI.endTransaction();
+  return true;
+}
+
+// Synchronous partial-window blit. Pushes only [x,y,w,h] so the notifier can
+// repaint just the ring at ~30 fps. Each row is copied through an INTERNAL bounce
+// (like fill()) before writeBytes, so a PSRAM-sourced window never issues the long
+// PSRAM DMA burst that was measured to reset this panel (see pushFrameChunked).
+bool pushRegion(int x, int y, int w, int h, const uint16_t* src, int srcStridePx) {
+  if (!rq || !src || w <= 0 || h <= 0) return false;
+  if (x < 0 || y < 0 || x + w > int(solide::display_tft::kW) ||
+      y + h > int(solide::display_tft::kH)) return false;
+  static uint16_t rowbuf[solide::display_tft::kW];   // internal, DMA-safe
+
+  tftSPI.beginTransaction(kPanelSPI);
+  digitalWrite(TFT_CS, LOW);
+  const uint8_t cols[4] = {uint8_t(x >> 8), uint8_t(x & 0xFF),
+                           uint8_t((x + w - 1) >> 8), uint8_t((x + w - 1) & 0xFF)};
+  const uint8_t rows[4] = {uint8_t(y >> 8), uint8_t(y & 0xFF),
+                           uint8_t((y + h - 1) >> 8), uint8_t((y + h - 1) & 0xFF)};
+  writeCmdData(CMD_CASET, cols, 4);
+  writeCmdData(CMD_RASET, rows, 4);
+  writeCmd(CMD_RAMWR);
+  for (int rr = 0; rr < h; ++rr) {
+    memcpy(rowbuf, src + size_t(rr) * size_t(srcStridePx), size_t(w) * 2);
+    tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(rowbuf), size_t(w) * 2);
   }
   digitalWrite(TFT_CS, HIGH);
   tftSPI.endTransaction();

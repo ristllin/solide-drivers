@@ -2,12 +2,12 @@
 #include <Arduino.h>
 #include "solide/encoder_decode.h"   // QuadDecoder / Button (portable core)
 #include "esp_heap_caps.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
 
 // EC11 pins from the canonical board config.
-static constexpr int ENC_A  = solide::kBoardSolideS3.enc.a;
-static constexpr int ENC_B  = solide::kBoardSolideS3.enc.b;
-static constexpr int ENC_SW = solide::kBoardSolideS3.enc.sw;
+static constexpr int ENC_A  = solide::activeBoard().enc.a;
+static constexpr int ENC_B  = solide::activeBoard().enc.b;
+static constexpr int ENC_SW = solide::activeBoard().enc.sw;
 
 namespace solide::input {
 

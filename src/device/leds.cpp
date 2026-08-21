@@ -2,12 +2,12 @@
 #include <Adafruit_NeoPixel.h>
 #include <cstring>
 #include "esp_heap_caps.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
 
 // LED pin + count from the canonical board config, as compile-time constants so
 // the NeoPixel buffer sizes at static-init. A board variant changes these here.
-static constexpr int LED_PIN   = solide::kBoardSolideS3.led.din;
-static constexpr int LED_COUNT = solide::kBoardSolideS3.led.count;
+static constexpr int LED_PIN   = solide::activeBoard().led.din;
+static constexpr int LED_COUNT = solide::activeBoard().led.count;
 
 // ----------------------------------------------------------------------------
 // S3 WS2812B ring driver. Two render layers over one ~60 FPS task:

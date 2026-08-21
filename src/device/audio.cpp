@@ -1,7 +1,9 @@
 #include "solide/audio.h"
-#include "solide/boards/board_solide_s3.h"
+#include "solide/boards/active_board.h"
+#include "solide/i2c_bus.h"
 #include "solide/wav.h"
 #include "solide/tone.h"
+#include "es8311.h"            // ES8311 codec register driver (Wire-adapted, Apache-2.0)
 #include "driver/i2s_std.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -17,18 +19,35 @@
 
 namespace solide::audio {
 
-static constexpr int SPK_BCLK  = kBoardSolideS3.spk.bclk;
-static constexpr int SPK_LRCLK = kBoardSolideS3.spk.lrclk;
-static constexpr int SPK_DIN   = kBoardSolideS3.spk.din;
-static constexpr int MIC_BCLK  = kBoardSolideS3.mic.bclk;
-static constexpr int MIC_WS    = kBoardSolideS3.mic.ws;
-static constexpr int MIC_DIN   = kBoardSolideS3.mic.din;
+static constexpr int SPK_BCLK  = activeBoard().spk.bclk;
+static constexpr int SPK_LRCLK = activeBoard().spk.lrclk;
+static constexpr int SPK_DIN   = activeBoard().spk.din;
+static constexpr int MIC_BCLK  = activeBoard().mic.bclk;
+static constexpr int MIC_WS    = activeBoard().mic.ws;
+static constexpr int MIC_DIN   = activeBoard().mic.din;
+
+// ES8311 codec variant (Freenove): one I2S bus carries both play + record, and
+// an I2C control channel (shared with the touch bus) programs the codec. Selected
+// by board data; the raw dual-I2S (INMP441 + amp) path is compiled out.
+static constexpr bool kCodec       = activeBoard().audioKind == AudioKind::Es8311Codec;
+static constexpr int  CODEC_MCLK   = activeBoard().codec.mclk;
+static constexpr int  CODEC_BCLK   = activeBoard().codec.bclk;
+static constexpr int  CODEC_WS     = activeBoard().codec.ws;
+static constexpr int  CODEC_DOUT   = activeBoard().codec.dout;
+static constexpr int  CODEC_DIN    = activeBoard().codec.din;
+static constexpr int  CODEC_SDA    = activeBoard().codec.i2cSda;
+static constexpr int  CODEC_SCL    = activeBoard().codec.i2cScl;
+static constexpr uint8_t CODEC_ADDR = activeBoard().codec.addr;
+static constexpr int  CODEC_AMPEN  = activeBoard().codec.ampEn;         // -1 = none
+static constexpr bool CODEC_AMP_HI = activeBoard().codec.ampActiveHigh; // level = ON
 
 static constexpr i2s_port_t TX_PORT = I2S_NUM_1;   // speaker (std)
 static constexpr i2s_port_t RX_PORT = I2S_NUM_0;   // mic (std)
 
 static i2s_chan_handle_t g_tx = nullptr;
 static i2s_chan_handle_t g_rx = nullptr;
+static es8311_handle_t   g_es = nullptr;     // codec handle (kCodec only)
+static bool              g_codecUp = false;  // full-duplex codec channel is live
 // The TX channel is shared by independent tasks (SFX playback task, orchestrator
 // turn task, web beep, self-test): unserialized, a concurrent spkOpen tears down
 // g_tx under the other writer and its spkWrite silently no-ops. One RECURSIVE
@@ -50,9 +69,97 @@ static int32_t  s_vol256    = 128;
 void  setVolume(float v) { s_vol256 = (int32_t)((v < 0.f ? 0.f : v > 1.f ? 1.f : v) * 256.f + 0.5f); }
 float getVolume()        { return (float)s_vol256 / 256.f; }
 
+// ---- ES8311 codec (shared full-duplex I2S + I2C control) --------------------
+// One std channel carries both TX (to the speaker DAC) and RX (from the mic ADC);
+// the ES8311 registers are programmed over the shared I2C bus. Kept ALIVE once up
+// - the codec cannot open/close TX per clip without also cutting an in-flight
+// recording - so spkDeinit/micDeinit are no-ops here; audio::end() tears it down.
+// Inline, no worker task (the no-concurrency invariant). The channel is re-clocked
+// (a clean full re-init) whenever the requested rate CHANGES - so a 16 kHz beep/STT
+// and a 24 kHz TTS clip each play at their true pitch - but a same-rate reopen is a
+// cheap no-op, preserving the kept-alive goal for the common case.
+static uint32_t g_codecRate = 0;
+static bool codecTeardown() {
+  if (g_tx) { i2s_channel_disable(g_tx); i2s_del_channel(g_tx); g_tx = nullptr; }
+  if (g_rx) { i2s_channel_disable(g_rx); i2s_del_channel(g_rx); g_rx = nullptr; }
+  if (g_es) { es8311_delete(g_es); g_es = nullptr; }
+  g_codecUp = false;
+  g_codecRate = 0;
+  return false;
+}
+static bool codecInit(uint32_t rate) {
+  if (rate < 8000 || rate > 48000) rate = 16000;
+  if (g_codecUp && rate == g_codecRate) return true;   // already at this rate
+  if (g_codecUp) codecTeardown();                      // rate changed: re-clock
+
+  i2s_chan_config_t cc = {};
+  cc.id = I2S_NUM_0;
+  cc.role = I2S_ROLE_MASTER;
+  cc.dma_desc_num = 8;
+  cc.dma_frame_num = 256;
+  cc.auto_clear = true;
+  if (i2s_new_channel(&cc, &g_tx, &g_rx) != ESP_OK) { g_tx = g_rx = nullptr; return false; }
+
+  i2s_std_config_t sc = {};
+  sc.clk_cfg.sample_rate_hz = rate;
+  sc.clk_cfg.clk_src        = I2S_CLK_SRC_DEFAULT;
+  sc.clk_cfg.mclk_multiple  = I2S_MCLK_MULTIPLE_256;   // ES8311 wants MCLK = 256*fs
+  sc.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_16BIT;
+  sc.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO;
+  sc.slot_cfg.slot_mode      = I2S_SLOT_MODE_STEREO;   // codec is 2-slot; mono duplicated
+  // The RX (mic) side shares this stereo config (the speaker DAC needs both slots),
+  // so a mono analog mic arrives interleaved [L,R,L,R,...]. The record path collapses
+  // each frame to the louder slot in codecStereoToMono() before it reaches STT, which
+  // recovers the mic whichever slot the ES8311 places it on. (Was MANUAL bench step 2.)
+  sc.slot_cfg.slot_mask      = I2S_STD_SLOT_BOTH;
+  sc.slot_cfg.ws_width       = 16;
+  sc.slot_cfg.ws_pol         = false;
+  sc.slot_cfg.bit_shift      = true;                   // Philips
+  sc.slot_cfg.left_align     = true;
+  sc.slot_cfg.big_endian     = false;
+  sc.slot_cfg.bit_order_lsb  = false;
+  sc.gpio_cfg.mclk = (gpio_num_t)CODEC_MCLK;
+  sc.gpio_cfg.bclk = (gpio_num_t)CODEC_BCLK;
+  sc.gpio_cfg.ws   = (gpio_num_t)CODEC_WS;
+  sc.gpio_cfg.dout = (gpio_num_t)CODEC_DOUT;
+  sc.gpio_cfg.din  = (gpio_num_t)CODEC_DIN;
+  if (i2s_channel_init_std_mode(g_tx, &sc) != ESP_OK) return codecTeardown();
+  if (i2s_channel_init_std_mode(g_rx, &sc) != ESP_OK) return codecTeardown();
+  if (i2s_channel_enable(g_tx) != ESP_OK) return codecTeardown();
+  if (i2s_channel_enable(g_rx) != ESP_OK) return codecTeardown();
+
+  // Program the ES8311 over the shared I2C bus (single owner with touch).
+  solide::i2cEnsureBegun(CODEC_SDA, CODEC_SCL);
+  g_es = es8311_create(CODEC_ADDR);
+  if (!g_es) return codecTeardown();
+  es8311_clock_config_t clk = {};
+  clk.mclk_inverted = false;
+  clk.sclk_inverted = false;
+  clk.mclk_from_mclk_pin = true;
+  clk.mclk_frequency = int(rate) * 256;
+  clk.sample_frequency = int(rate);
+  if (es8311_init(g_es, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16) != ESP_OK)
+    return codecTeardown();
+  es8311_sample_frequency_config(g_es, int(rate) * 256, int(rate));
+  es8311_voice_volume_set(g_es, 80, nullptr);
+  es8311_microphone_config(g_es, false);   // analog mic (not PDM)
+  // Enable the external speaker power amp. Without this the codec DAC drives a
+  // disabled amp and NOTHING comes out (the "speaker doesn't work" report). The
+  // Freenove PA is active-LOW (ampActiveHigh=false), so LOW turns it on. -1 = no
+  // amp pin (always on / not fitted). Enabled once and left on for the session.
+  if constexpr (CODEC_AMPEN >= 0) {
+    pinMode(CODEC_AMPEN, OUTPUT);
+    digitalWrite(CODEC_AMPEN, CODEC_AMP_HI ? HIGH : LOW);
+  }
+  g_codecUp = true;
+  g_codecRate = rate;
+  return true;
+}
+
 // ---- speaker (TX / i2s_std) --------------------------------------------------
 
 static bool spkInit(uint32_t rate) {
+  if constexpr (kCodec) return codecInit(rate);
   if (g_tx) return true;
   i2s_chan_config_t cc = {};
   cc.id = TX_PORT;
@@ -87,6 +194,7 @@ static bool spkInit(uint32_t rate) {
 }
 
 static void spkDeinit() {
+  if constexpr (kCodec) return;   // shared full-duplex channel stays up (see codecInit)
   if (!g_tx) return;
   i2s_channel_disable(g_tx);
   i2s_del_channel(g_tx);
@@ -198,6 +306,7 @@ bool playWavFile(fs::FS& fs, const char* path) {
 // the PDM `hp_en` filter is not needed. Mic RX = I2S_NUM_0, independent of the
 // speaker TX (I2S_NUM_1), so record + play run concurrently (loopbackSelfTest).
 static bool micInit() {
+  if constexpr (kCodec) return codecInit(kMicSampleRate);
   if (g_rx) return true;
   i2s_chan_config_t cc = {};
   cc.id = RX_PORT;
@@ -231,6 +340,7 @@ static bool micInit() {
 }
 
 static void micDeinit() {
+  if constexpr (kCodec) return;   // shared full-duplex channel stays up (see codecInit)
   if (!g_rx) return;
   i2s_channel_disable(g_rx);
   i2s_del_channel(g_rx);
@@ -243,6 +353,25 @@ static void micSettle() {
   while (millis() - t0 < 60) i2s_channel_read(g_rx, rb, sizeof(rb), &got, 20);
 }
 
+// De-interleave a codec (ES8311) mic read to packed mono, IN PLACE. The codec RX
+// shares the full-duplex STEREO slot config (the speaker DAC needs two slots), so a
+// single analog mic arrives as [L,R,L,R,...] frames - the mic on one slot, the
+// other a duplicate or silence - while the record contract is packed 16 kHz mono.
+// Collapse each frame to the LOUDER slot, which recovers the mic whichever slot it
+// lands on (and equals either slot for a duplicated mono source). `n` is the
+// interleaved int16 count the read returned (a whole number of stereo frames, since
+// i2s reads frame-aligned); returns the mono int16 count. No-op (returns n) on the
+// non-codec INMP441 path, which is already mono. This is MANUAL bench step 2's fix.
+static size_t codecStereoToMono(int16_t* s, size_t n) {
+  if constexpr (!kCodec) return n;
+  size_t m = 0;
+  for (size_t i = 0; i + 1 < n; i += 2) {
+    const int l = s[i], r = s[i + 1];
+    s[m++] = ((l < 0 ? -l : l) >= (r < 0 ? -r : r)) ? s[i] : s[i + 1];
+  }
+  return m;
+}
+
 size_t recordToBuffer(int16_t* out, size_t maxSamples, uint32_t maxMs, const volatile bool* stopFlag) {
   if (!micInit()) return 0;
   micSettle();
@@ -252,7 +381,7 @@ size_t recordToBuffer(int16_t* out, size_t maxSamples, uint32_t maxMs, const vol
     size_t chunk = want < 512 ? want : 512;
     size_t got = 0;
     if (i2s_channel_read(g_rx, out + total, chunk, &got, 100) == ESP_OK && got > 0)
-      total += got / sizeof(int16_t);
+      total += codecStereoToMono(out + total, got / sizeof(int16_t));
   }
   micDeinit();
   return total;
@@ -272,8 +401,9 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
   while (millis() - t0 < maxMs && !(stopFlag && *stopFlag)) {
     size_t got = 0;
     if (i2s_channel_read(g_rx, buf, bufBytes, &got, 100) == ESP_OK && got > 0) {
-      f.write((const uint8_t*)buf, got);
-      bytesWritten += got;
+      const size_t mono = codecStereoToMono(buf, got / sizeof(int16_t)) * sizeof(int16_t);
+      f.write((const uint8_t*)buf, mono);
+      bytesWritten += mono;
     }
   }
   if (rb) heap_caps_free(rb);
@@ -341,7 +471,7 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
     while (got < n && millis() - t0 < 700) {
       size_t r = 0;
       if (i2s_channel_read(g_rx, rec + got, (n - got) * sizeof(int16_t), &r, 100) == ESP_OK)
-        got += r / sizeof(int16_t);
+        got += codecStereoToMono(rec + got, r / sizeof(int16_t));
     }
     uint32_t guard = millis();
     while (!ctx.done && millis() - guard < 500) delay(5);   // let the play task finish
@@ -384,6 +514,10 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
 
 // ---- lifecycle ---------------------------------------------------------------
 bool begin() { return true; }   // channels open lazily on first use
-void end() { spkClose(); micDeinit(); }
+void end() {
+  spkClose();
+  micDeinit();
+  if constexpr (kCodec) codecTeardown();   // real teardown of the shared codec channel
+}
 
 }  // namespace solide::audio

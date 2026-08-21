@@ -12,6 +12,13 @@
 
 namespace solide {
 
+// Peripheral variants a board can carry. The default (value 0) matches the
+// original Solide S3 so a board constant that omits these fields still describes
+// that board; every board constant nonetheless sets them explicitly.
+enum class TouchKind : uint8_t { None = 0, ResistiveSpi = 1, CapacitiveI2c = 2 };
+enum class AudioKind : uint8_t { RawI2s = 0, Es8311Codec = 1 };
+enum class SdKind    : uint8_t { Spi = 0, Sdmmc = 1 };
+
 // GPIO numbers; -1 = unused/not-connected.
 struct Board {
   const char* name;
@@ -35,6 +42,36 @@ struct Board {
   // cells = series Li-ion count (pack mV ÷ cells = per-cell mV). sense = -1
   // when the divider isn't fitted - battery::begin() then reports absent.
   struct { int8_t sense; uint16_t dividerX100; uint8_t cells; } batt;
+
+  // ---- Variant capabilities (drivers branch on these; all set explicitly) ----
+  // hasRing: true when led{} drives a physical addressable ring the notifier
+  //   animates. false for an all-in-one board whose led is a single status pixel;
+  //   the notifier then renders the ring on the panel instead (see ring_out).
+  bool      hasRing;
+  TouchKind touchKind;   // which touch controller/bus binds when a panel is fitted
+  AudioKind audioKind;   // raw dual-I2S mic+amp, or a single I2S codec (ES8311)
+  SdKind    sdKind;      // SPI card, or on-board SDMMC (SDIO)
+  bool      tftInvert;   // ILI9341 needs software inversion ON (ILI9341_2 modules)
+  // DevKitC onboard WS2812 that must be blanked once at boot (it can latch
+  // glowing when its pin is later repurposed). -1 = none / not repurposed.
+  int8_t    onboardRgbPin;
+
+  // Capacitive touch (FT6336U / GT911 class) over I2C. Read only when
+  // touchKind == CapacitiveI2c; reports already-scaled pixel coordinates, so the
+  // resistive min/max calibration does not apply (swap/invert flags only).
+  struct { int8_t sda, scl, intr, rst; uint8_t addr; } touchI2c;
+
+  // ES8311 mono codec: I2C control + a single full-duplex I2S port with MCLK.
+  // Read only when audioKind == Es8311Codec. ampEn = power-amp enable GPIO
+  // (-1 = always on / not fitted); ampActiveHigh selects the level that turns the
+  // amp ON (the Freenove PA is active-LOW: driven LOW = enabled). Shares its I2C
+  // bus with touchI2c when both are on the same SDA/SCL.
+  struct { int8_t mclk, bclk, ws, dout, din, i2cSda, i2cScl, ampEn; uint8_t addr;
+           bool ampActiveHigh; } codec;
+
+  // On-board SDMMC (SDIO) card. Read only when sdKind == Sdmmc. d1..d3 = -1
+  // selects 1-bit mode.
+  struct { int8_t clk, cmd, d0, d1, d2, d3; } sdmmc;
 };
 
 // The active board, selected at build time via -DSOLIDE_BOARD=<id> (default: solide_s3).
