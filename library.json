@@ -1,6 +1,6 @@
 {
   "name": "solide-drivers",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "description": "Board-support package for the Solide S3 device (ESP32-S3-DevKitC-1 N16R8): e-paper (fast 2-colour + 3-colour), WS2812B LED ring with agent-status segmentation, I2S speaker + I2S MEMS mic audio, SD storage, NVS+SD persistent memory, and an EC11 encoder + menu FSM. Hardware-only, documented for humans and agents, host- and device-tested.",
   "keywords": "esp32-s3, bsp, e-paper, gxepd2, ws2812, neopixel, i2s, inmp441, sd, encoder",
   "repository": { "type": "git", "url": "https://github.com/ristllin/solide-drivers.git" },

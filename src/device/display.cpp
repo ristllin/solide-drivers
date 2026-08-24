@@ -1,5 +1,16 @@
 #include "solide/display.h"
-#include "solide/boards/active_board.h"
+#include "solide/boards/active_board.h"   // SOLIDE_HAS_EPAPER
+
+// ============================================================================
+// E-paper driver, compile-gated on SOLIDE_HAS_EPAPER (see active_board.h). The
+// current boards are all colour-TFT, so the default build takes the #else branch
+// below: inert no-op stubs that link ZERO GxEPD2 and construct no framebuffers,
+// reclaiming ~14.5 KB of internal SRAM. Set -DSOLIDE_HAS_EPAPER=1 to build the
+// real driver (an out-of-tree e-paper board). The public API in solide/display.h
+// is identical across both branches.
+// ============================================================================
+#if SOLIDE_HAS_EPAPER
+
 #include "solide/status_art.h"
 #include "esp_heap_caps.h"
 
@@ -520,3 +531,27 @@ void showArt(int state, bool fast) {
 void clear() { enqueue(R_CLEAR, nullptr, nullptr); }
 
 }  // namespace solide::display
+
+#else  // !SOLIDE_HAS_EPAPER
+
+// ---- e-paper compiled out: inert stubs, zero GxEPD2 -------------------------
+// A colour-TFT board (the default) has no e-paper panel. The public API stays
+// linkable so the umbrella solide::begin(), the self-test, examples, and any
+// out-of-tree consumer still build; every entry point is a safe no-op. begin()
+// returns false so solide::begin() reports the pair as absent and the self-test
+// skips it. No GxEPD2 header is included and no framebuffer is constructed here,
+// so this translation unit links none of the ~14.5 KB e-paper footprint.
+namespace solide::display {
+
+bool begin()      { return false; }
+bool taskAlive()  { return false; }
+void requestText(const String&, const String&, int, bool) {}
+int  maxTextScroll() { return 0; }
+void requestMenu(const solide::menu::MenuView&, bool) {}
+void requestBitmap(const uint8_t*, const uint8_t*, int16_t, int16_t, bool, bool, bool) {}
+void showArt(int, bool) {}
+void clear() {}
+
+}  // namespace solide::display
+
+#endif  // SOLIDE_HAS_EPAPER

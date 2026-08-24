@@ -3,6 +3,14 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## v0.6.0 (2026-08-24)
+
+- E-paper driver is compile-gated behind SOLIDE_HAS_EPAPER (default off). Colour-TFT
+  builds link zero GxEPD2 and reclaim ~14.5 KB of contiguous internal SRAM (the two
+  e-paper objects were file-scope statics the linker could not strip). Define
+  SOLIDE_HAS_EPAPER=1 to keep building the e-paper API; the public header surface is
+  unchanged either way.
+
 ## [0.4.0] - 2026-08-10
 
 ### Added

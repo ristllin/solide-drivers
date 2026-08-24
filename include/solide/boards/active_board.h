@@ -34,6 +34,23 @@
   #error "Unknown SOLIDE_BOARD (expected solide_s3 or freenove_s3)"
 #endif
 
+// ---- E-paper capability gate ------------------------------------------------
+// SOLIDE_HAS_EPAPER = 1 only for a board that ships the WeAct 2.9" SSD1680
+// e-paper panel. Both current boards (solide_s3, freenove_s3) are colour-TFT, so
+// the default is 0: the e-paper driver (solide/display.h) then builds to inert
+// no-op stubs that link ZERO GxEPD2, reclaiming ~14.5 KB of contiguous internal
+// SRAM (bwDisp 4,868 B + colorDisp 9,600 B of framebuffer that static
+// construction would otherwise pin on every TFT build). The solide_s3 PCB pads
+// physically support either panel (epd{} pins are kept in board data), so this
+// is deliberately an explicit capability, not inferred from the epd pins.
+//
+// An out-of-tree consumer that still drives the e-paper re-enables the full
+// driver with a single build flag: -DSOLIDE_HAS_EPAPER=1. The public API in
+// solide/display.h is unchanged either way.
+#ifndef SOLIDE_HAS_EPAPER
+#define SOLIDE_HAS_EPAPER 0
+#endif
+
 namespace solide {
 // constexpr so drivers can bind pins in static initializers.
 inline constexpr const Board& activeBoard() { return SOLIDE_ACTIVE_BOARD_CONST; }
