@@ -3,6 +3,13 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## v0.6.1 (2026-08-24)
+
+- display_tft: full-frame blits sourced from PSRAM are staged band-by-band through
+  an internal-SRAM bounce buffer. A single large DMA burst from PSRAM could reset
+  the panel (white screen); internal-frame and bounce-unavailable paths are
+  unchanged.
+
 ## v0.6.0 (2026-08-24)
 
 - E-paper driver is compile-gated behind SOLIDE_HAS_EPAPER (default off). Colour-TFT

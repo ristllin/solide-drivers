@@ -5,6 +5,9 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
+#include <esp_heap_caps.h>
+#include <esp_memory_utils.h>   // esp_ptr_external_ram
+
 #include "solide/board.h"
 #include "solide/boards/active_board.h"
 
@@ -69,6 +72,17 @@ QueueHandle_t     rq          = nullptr;
 volatile bool     g_taskAlive = false;
 volatile bool     g_busy      = false;
 uint8_t           g_backlight = 100;
+
+// Internal DMA-safe bounce for the async full-frame blit. A 150 KB DMA burst
+// sourced STRAIGHT from PSRAM was measured to reset this panel (MADCTL 0x28 ->
+// 0x00) - the same fault documented at length on pushFrameChunked below. The
+// firmware's framebuffer lives in PSRAM, so blit() stages it band-by-band
+// through this buffer, making the DMA source internal SRAM every time. What
+// matters is the SOURCE, not the burst length, so a few bands are enough: this
+// costs a fraction of the ~14.5 KB the e-paper compile-gate reclaimed. Owned by
+// the single render task (blit's only caller), so no locking is needed.
+constexpr int     kBlitBandRows = 8;    // 8 x 320 x 2 = 5,120 B internal (DMA)
+uint16_t*         g_blitBounce  = nullptr;
 bool              g_flip = false;   // which end of the landscape panel is up
 bool              g_blAttached = false;  // did the backlight PWM actually attach?
 
@@ -187,14 +201,29 @@ void panelRearm() {
 }
 
 void blit(const uint16_t* fb) {
+  const int W = solide::display_tft::kW, H = solide::display_tft::kH;
   tftSPI.beginTransaction(kPanelSPI);
   digitalWrite(TFT_CS, LOW);
   setFullWindow();
   writeCmd(CMD_RAMWR);
   // The framebuffer is already big-endian RGB565 - the panel's own wire order -
   // so it goes out as raw bytes with no per-pixel work.
-  tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(fb),
-                    size_t(solide::display_tft::kW) * solide::display_tft::kH * 2);
+  //
+  // WARNING: a single 150 KB DMA burst sourced from PSRAM resets this panel (see
+  // pushFrameChunked). When the frame lives in PSRAM, stage it band-by-band
+  // through the internal bounce so the DMA always sources internal SRAM. A frame
+  // that is already internal (or if the bounce could not be allocated) writes
+  // straight out; the direct path is only unsafe for a PSRAM source.
+  if (g_blitBounce && esp_ptr_external_ram(fb)) {
+    for (int y = 0; y < H; y += kBlitBandRows) {
+      const int rows = (y + kBlitBandRows > H) ? (H - y) : kBlitBandRows;
+      const size_t n = size_t(rows) * size_t(W);
+      memcpy(g_blitBounce, fb + size_t(y) * size_t(W), n * 2);
+      tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(g_blitBounce), n * 2);
+    }
+  } else {
+    tftSPI.writeBytes(reinterpret_cast<const uint8_t*>(fb), size_t(W) * size_t(H) * 2);
+  }
   digitalWrite(TFT_CS, HIGH);
   tftSPI.endTransaction();
 }
@@ -239,6 +268,17 @@ bool begin() {
     if (!g_blAttached) log_e("display_tft: backlight PWM attach FAILED on GPIO %d", int(TFT_BL));
     setBacklight(100);
   }
+
+  // Internal DMA-safe bounce for PSRAM-sourced full frames (see blit()). Not
+  // fatal if it cannot be taken: blit() then writes a PSRAM frame directly, which
+  // is the pre-existing behaviour, so a low-memory board still runs (with the old
+  // panel-reset risk) rather than failing to bring the display up at all.
+  g_blitBounce = static_cast<uint16_t*>(
+      heap_caps_malloc(size_t(kBlitBandRows) * size_t(kW) * 2,
+                       MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
+  if (!g_blitBounce)
+    log_w("tft: blit bounce alloc FAILED (%u B) - PSRAM frames blit directly",
+          unsigned(size_t(kBlitBandRows) * size_t(kW) * 2));
 
   rq = xQueueCreate(1, sizeof(FrameCmd));   // depth 1: frames coalesce, never queue up
   if (!rq) {
