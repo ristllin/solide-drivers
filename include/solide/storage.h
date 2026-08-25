@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <FS.h>
+#include "solide/storage_format.h"   // FormatResult + the portable format state machine
 
 // ============================================================================
 // Nuage Solide S3 - microSD storage helper
@@ -64,6 +65,21 @@ void   listDir(const char* path);
 
 // ---- Capacity (MB) --------------------------------------------------------
 uint64_t cardSizeMB();   // total card size
+
+// ---- Destructive: full-card format (FATFS f_mkfs) -------------------------
+// Reformat the ENTIRE mounted card to a fresh FAT volume, erasing every file on
+// it. This is not "erase /mem": it rebuilds the filesystem from scratch (FAT or
+// FAT32, chosen by card size), on whichever backend actually mounted (SPI SD or
+// on-board SDMMC).
+//
+// REFUSES cleanly (FormatResult::NoCard, no side effects) when no card is
+// mounted - it never formats a card it did not already have open. On success the
+// card is left freshly mounted and ready for I/O (begin() is re-run internally).
+// See FormatResult for the exact failure stage on a non-Ok return.
+//
+// The on-hardware destructive acceptance of this call is gated on a scratch card
+// and lives in the HIL suite; the host tests here cover the state machine/guards.
+FormatResult format();
 uint64_t usedMB();       // used bytes  (SD.usedBytes())
 uint64_t freeMB();       // cardSizeMB() - usedMB()
 

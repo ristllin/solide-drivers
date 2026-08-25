@@ -18,6 +18,21 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   SOLIDE_HAS_EPAPER=1 to keep building the e-paper API; the public header surface is
   unchanged either way.
 
+## [0.7.0] - 2026-08-25
+
+### Added
+- **`solide::storage::format()`** - full-card FAT (re)format primitive. Runs
+  FATFS `f_mkfs` (FAT or FAT32, chosen by card size) over the mounted card on
+  whichever backend actually mounted (SPI `SD` or on-board
+  `SD_MMC`), then remounts so the card is left clean and ready for I/O. Refuses
+  cleanly (`FormatResult::NoCard`, no side effects) when no card is mounted - it
+  never formats a card it did not already have open. Returns a `FormatResult`
+  (`Ok` / `NoCard` / `MkfsFailed` / `RemountFailed`) naming the exact failure
+  stage. The refuse-when-absent guard and the mkfs-then-remount ordering live in
+  a portable, host-tested state machine (`solide/storage_format.h`,
+  `test/test_storage_format/`); the on-card destructive acceptance is gated on a
+  scratch card and lives in the consuming firmware's HIL suite.
+
 ## [0.4.0] - 2026-08-10
 
 ### Added

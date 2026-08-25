@@ -3,6 +3,7 @@
 #include <SD.h>
 #include <SD_MMC.h>
 #include <FS.h>
+#include <ff.h>   // FATFS f_mkfs / MKFS_PARM / FF_MAX_SS (esp-idf fatfs component)
 #include "solide/boards/active_board.h"
 
 // SD bus pins from the canonical board config (FSPI/SPI2 native IOMUX).
@@ -181,6 +182,49 @@ void listDir(const char* path) {
   }
   dir.close();
 }
+
+// ---- full-card format -----------------------------------------------------
+// Both Arduino backends register exactly ONE FATFS logical drive for the single
+// card this module mounts, and it is the only FATFS volume on the device
+// (LittleFS on flash does not use ff_diskio). That fixes the drive string at
+// "0:" for both the SPI SD and the SDMMC path. If a second FATFS volume is ever
+// added, derive the drive from the mount instead of assuming volume 0.
+static constexpr const char* kFatDrive = "0:";
+
+// Run f_mkfs on the active volume. FM_ANY matches the Arduino SD library's own
+// format path; FatFs picks FAT or FAT32 by card size (exFAT is compiled out in
+// this build, FF_FS_EXFAT=0, so FM_ANY never yields exFAT). Returns true only on
+// FR_OK. Allocates the transient work buffer on the heap (FF_MAX_SS is up to
+// 4 KB) so it never sits on the caller's stack.
+static bool doMkfsActiveVolume() {
+  BYTE* work = (BYTE*)malloc(FF_MAX_SS);
+  if (!work) {
+    Serial.println("SD: format aborted - no memory for work buffer");
+    return false;
+  }
+  const MKFS_PARM opt = {(BYTE)FM_ANY, 0, 0, 0, 0};
+  FRESULT res = f_mkfs(kFatDrive, &opt, work, FF_MAX_SS);
+  free(work);
+  if (res != FR_OK) {
+    Serial.printf("SD: f_mkfs failed (FRESULT %d)\n", (int)res);
+    return false;
+  }
+  return true;
+}
+
+FormatResult format() {
+  // The guard, mkfs, and remount ordering live in the portable state machine so
+  // they are host-tested; this call binds it to the real device steps. A
+  // successful mkfs leaves the VFS pointing at the now-erased volume, so end()
+  // + begin() is required to return a clean, freshly mounted card.
+  FormatResult r = detail::runFormat(
+      g_ok,
+      doMkfsActiveVolume,
+      []() { end(); return begin(); });
+  Serial.printf("SD: format -> %s\n", formatResultStr(r));
+  return r;
+}
+
 
 // ---- capacity (MB) --------------------------------------------------------
 uint64_t cardSizeMB() { return g_ok ? cardBytes() / MB : 0; }
