@@ -349,7 +349,14 @@ void reinit() { panelInit(); }
 // panel even when it is demonstrably working - unusable. RDDST does work.
 bool healthy() {
   const uint8_t got = uint8_t(readReg(0x09, 4) >> 24);
-  return (got & 0xFE) == (madctlFor(g_flip) & 0xFE);
+  // RDDST's status byte mirrors MADCTL's fixed bits (BGR/MV/refresh order) but NOT
+  // the MY/MX 180-flip bits (0xC0), which stay at their power-on value regardless of
+  // the flip we write (measured on hardware, F6/CUM-188). Comparing the full byte made
+  // a flipped panel (madctlFor(1)=0xE8) read unhealthy forever, thrashing the watchdog.
+  // Mask the flip bits out so the check is flip-independent while still catching a real
+  // state loss (a reset reverts these bits, so 0x00 still fails).
+  const uint8_t kMask = uint8_t(0xFE & ~0xC0);   // 0x3E: drop scan-toggle bit0 + MY/MX
+  return (got & kMask) == (madctlFor(g_flip) & kMask);
 }
 
 // Write a known pixel pattern at the CURRENT clock, then read it back at a slow,
