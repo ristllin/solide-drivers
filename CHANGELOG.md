@@ -18,6 +18,27 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   SOLIDE_HAS_EPAPER=1 to keep building the e-paper API; the public header surface is
   unchanged either way.
 
+## [0.7.2] - 2026-08-30
+
+### Fixed
+- **`display_tft::healthy()`** now compares the full RDDST status byte (minus the
+  refresh scan-toggle bit0) against `madctlFor(g_flip)` with the MY/MX flip bits
+  cleared, instead of masking the flip bits out of both sides. RDDST reports MY/MX
+  as their power-on 0 regardless of the flip written, so the expected readback is
+  0x28 for both orientations: this keeps the v0.7.1 no-thrash property (a flipped
+  panel no longer reads unhealthy forever) while restoring detection of a partial
+  state loss that raises MY/MX in RDDST (got=0xE8), which the v0.7.1 0x3E mask read
+  as healthy. Reset (0x00) still fails in both orientations. Regression-tested both
+  directions on the host (nimbus `test/test_panel_health`).
+
+## [0.7.1] - 2026-08-28
+
+### Fixed
+- **`display_tft::healthy()`** masked the MY/MX flip bits out of the RDDST compare
+  so a flipped panel (`madctlFor(1)=0xE8`) no longer read unhealthy forever and
+  thrashed the panel watchdog (nimbus CUM-188). Superseded by 0.7.2, which keeps the
+  no-thrash property without dropping fault sensitivity.
+
 ## [0.7.0] - 2026-08-25
 
 ### Added

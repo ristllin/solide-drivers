@@ -349,14 +349,18 @@ void reinit() { panelInit(); }
 // panel even when it is demonstrably working - unusable. RDDST does work.
 bool healthy() {
   const uint8_t got = uint8_t(readReg(0x09, 4) >> 24);
-  // RDDST's status byte mirrors MADCTL's fixed bits (BGR/MV/refresh order) but NOT
-  // the MY/MX 180-flip bits (0xC0), which stay at their power-on value regardless of
-  // the flip we write (measured on hardware, F6/CUM-188). Comparing the full byte made
-  // a flipped panel (madctlFor(1)=0xE8) read unhealthy forever, thrashing the watchdog.
-  // Mask the flip bits out so the check is flip-independent while still catching a real
-  // state loss (a reset reverts these bits, so 0x00 still fails).
-  const uint8_t kMask = uint8_t(0xFE & ~0xC0);   // 0x3E: drop scan-toggle bit0 + MY/MX
-  return (got & kMask) == (madctlFor(g_flip) & kMask);
+  // RDDST's status byte mirrors MADCTL's fixed bits (BGR / MV / refresh order) but
+  // reports the MY/MX 180-flip bits (0xC0) as their power-on 0 regardless of the flip
+  // we write (measured on hardware, F6/CUM-188). So the EXPECTED readback is
+  // madctlFor(g_flip) with the flip bits CLEARED - not the flip bits masked out of the
+  // compare. Clearing them on the expected side keeps a flipped panel from reading
+  // unhealthy forever (both sides agree on 0x28, so no watchdog thrash), while STILL
+  // checking got's MY/MX against their expected 0: a partial state loss that raises
+  // them (which masking 0xC0 out of both sides would wave through as healthy) now
+  // fails. A reset reverts the fixed bits too, so 0x00 still fails. bit0 is the
+  // refresh scan-toggle - drop it.
+  const uint8_t expected = uint8_t(madctlFor(g_flip) & ~0xC0);   // 0x28 for both flips
+  return (got & 0xFE) == expected;
 }
 
 // Write a known pixel pattern at the CURRENT clock, then read it back at a slow,
