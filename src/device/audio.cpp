@@ -1,6 +1,7 @@
 #include "solide/audio.h"
 #include "solide/boards/active_board.h"
 #include "solide/i2c_bus.h"
+#include "solide/audio_reclock.h"
 #include "solide/wav.h"
 #include "solide/tone.h"
 #include "es8311.h"            // ES8311 codec register driver (Wire-adapted, Apache-2.0)
@@ -79,18 +80,74 @@ float getVolume()        { return (float)s_vol256 / 256.f; }
 // and a 24 kHz TTS clip each play at their true pitch - but a same-rate reopen is a
 // cheap no-op, preserving the kept-alive goal for the common case.
 static uint32_t g_codecRate = 0;
+// Count of record read loops parked in a blocking i2s_channel_read(g_rx).
+// Read + written only under s_spkMutex (each record session in/decrements it, and
+// every codecInit() runs under it), so codecInit sees a consistent value and can
+// refuse a rate-change teardown that would free g_rx under a reader (CUM-272). A
+// COUNT, not a bool: two overlapping record sessions must both clear before a
+// re-clock is allowed, so the first to finish cannot green-light a teardown while
+// the second is still reading.
+static int g_rxCount = 0;
 static bool codecTeardown() {
   if (g_tx) { i2s_channel_disable(g_tx); i2s_del_channel(g_tx); g_tx = nullptr; }
   if (g_rx) { i2s_channel_disable(g_rx); i2s_del_channel(g_rx); g_rx = nullptr; }
   if (g_es) { es8311_delete(g_es); g_es = nullptr; }
   g_codecUp = false;
   g_codecRate = 0;
+  g_rxCount = 0;   // RX handle is gone; keep the in-flight count consistent
   return false;
+}
+// Program the ES8311 registers over the shared I2C bus (single owner with touch),
+// then enable the speaker power amp. Holds the shared bus lock across the whole
+// register block so the touch recovery ladder cannot tear Wire down mid-transaction
+// on the other core (CUM-271). Returns false on any bring-up failure.
+static bool codecProgramEs8311(uint32_t rate) {
+  solide::I2cBusLock lock;
+  solide::i2cEnsureBegun(CODEC_SDA, CODEC_SCL);
+  g_es = es8311_create(CODEC_ADDR);
+  if (!g_es) return false;
+  es8311_clock_config_t clk = {};
+  clk.mclk_inverted = false;
+  clk.sclk_inverted = false;
+  clk.mclk_from_mclk_pin = true;
+  clk.mclk_frequency = int(rate) * 256;
+  clk.sample_frequency = int(rate);
+  if (es8311_init(g_es, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16) != ESP_OK) return false;
+  es8311_sample_frequency_config(g_es, int(rate) * 256, int(rate));
+  es8311_voice_volume_set(g_es, 80, nullptr);
+  es8311_microphone_config(g_es, false);   // analog mic (not PDM)
+  // Enable the external speaker power amp. Without this the codec DAC drives a
+  // disabled amp and NOTHING comes out (the "speaker doesn't work" report). The
+  // Freenove PA is active-LOW (ampActiveHigh=false), so LOW turns it on. -1 = no
+  // amp pin (always on / not fitted). Enabled once and left on for the session.
+  if constexpr (CODEC_AMPEN >= 0) {
+    pinMode(CODEC_AMPEN, OUTPUT);
+    digitalWrite(CODEC_AMPEN, CODEC_AMP_HI ? HIGH : LOW);
+  }
+  return true;
 }
 static bool codecInit(uint32_t rate) {
   if (rate < 8000 || rate > 48000) rate = 16000;
-  if (g_codecUp && rate == g_codecRate) return true;   // already at this rate
-  if (g_codecUp) codecTeardown();                      // rate changed: re-clock
+  // Decide against the current codec state (portable, host-tested). A rate change
+  // means tearing down + rebuilding the shared full-duplex channel; if a recording
+  // is in flight on g_rx, that teardown is a use-after-free (CUM-272), so refuse it.
+  switch (solide::audio::planReclock(g_codecUp, g_codecRate, rate, g_rxCount > 0)) {
+    case solide::audio::ReclockPlan::NoChange:
+      return true;                       // already at this rate
+    case solide::audio::ReclockPlan::RefuseRxBusy:
+      // A record read is parked in i2s_channel_read(g_rx). Re-clocking would
+      // i2s_del_channel(g_rx) out from under it, so it is forbidden. Report failure
+      // (return false) rather than silently re-using the recording's rate: a caller
+      // that fed, say, 24 kHz PCM would otherwise play it at 16 kHz - wrong pitch
+      // and duration with no error. The caller (spkOpen) sees false and can retry
+      // after the recording ends. Same-rate playback took the NoChange path above.
+      return false;
+    case solide::audio::ReclockPlan::Reclock:
+      codecTeardown();                   // rate changed, RX idle: safe to re-clock
+      break;
+    case solide::audio::ReclockPlan::Fresh:
+      break;                             // nothing up yet: build from scratch
+  }
 
   i2s_chan_config_t cc = {};
   cc.id = I2S_NUM_0;
@@ -128,29 +185,7 @@ static bool codecInit(uint32_t rate) {
   if (i2s_channel_enable(g_tx) != ESP_OK) return codecTeardown();
   if (i2s_channel_enable(g_rx) != ESP_OK) return codecTeardown();
 
-  // Program the ES8311 over the shared I2C bus (single owner with touch).
-  solide::i2cEnsureBegun(CODEC_SDA, CODEC_SCL);
-  g_es = es8311_create(CODEC_ADDR);
-  if (!g_es) return codecTeardown();
-  es8311_clock_config_t clk = {};
-  clk.mclk_inverted = false;
-  clk.sclk_inverted = false;
-  clk.mclk_from_mclk_pin = true;
-  clk.mclk_frequency = int(rate) * 256;
-  clk.sample_frequency = int(rate);
-  if (es8311_init(g_es, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16) != ESP_OK)
-    return codecTeardown();
-  es8311_sample_frequency_config(g_es, int(rate) * 256, int(rate));
-  es8311_voice_volume_set(g_es, 80, nullptr);
-  es8311_microphone_config(g_es, false);   // analog mic (not PDM)
-  // Enable the external speaker power amp. Without this the codec DAC drives a
-  // disabled amp and NOTHING comes out (the "speaker doesn't work" report). The
-  // Freenove PA is active-LOW (ampActiveHigh=false), so LOW turns it on. -1 = no
-  // amp pin (always on / not fitted). Enabled once and left on for the session.
-  if constexpr (CODEC_AMPEN >= 0) {
-    pinMode(CODEC_AMPEN, OUTPUT);
-    digitalWrite(CODEC_AMPEN, CODEC_AMP_HI ? HIGH : LOW);
-  }
+  if (!codecProgramEs8311(rate)) return codecTeardown();
   g_codecUp = true;
   g_codecRate = rate;
   return true;
@@ -372,8 +407,27 @@ static size_t codecStereoToMono(int16_t* s, size_t n) {
   return m;
 }
 
+// Bring the mic/RX side up and atomically mark the recording in-flight, under
+// s_spkMutex, so a concurrent different-rate playback refuses to re-clock (which
+// would i2s_del_channel(g_rx) under the blocking read) - CUM-272. The read loop
+// itself then holds NO lock, so full-duplex record+play at the SAME rate still
+// runs concurrently. Returns false if the channel could not be started.
+static bool rxSessionBegin() {
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
+  const bool up = micInit();
+  if (up) g_rxCount++;
+  xSemaphoreGiveRecursive(s_spkMutex);
+  return up;
+}
+static void rxSessionEnd() {
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
+  if (g_rxCount > 0) g_rxCount--;
+  xSemaphoreGiveRecursive(s_spkMutex);
+  micDeinit();   // no-op for the codec; real teardown only on the INMP441 path
+}
+
 size_t recordToBuffer(int16_t* out, size_t maxSamples, uint32_t maxMs, const volatile bool* stopFlag) {
-  if (!micInit()) return 0;
+  if (!rxSessionBegin()) return 0;
   micSettle();
   size_t total = 0; uint32_t t0 = millis();
   while (total < maxSamples && millis() - t0 < maxMs && !(stopFlag && *stopFlag)) {
@@ -383,14 +437,14 @@ size_t recordToBuffer(int16_t* out, size_t maxSamples, uint32_t maxMs, const vol
     if (i2s_channel_read(g_rx, out + total, chunk, &got, 100) == ESP_OK && got > 0)
       total += codecStereoToMono(out + total, got / sizeof(int16_t));
   }
-  micDeinit();
+  rxSessionEnd();
   return total;
 }
 
 size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile bool* stopFlag) {
-  if (!micInit()) return 0;
+  if (!rxSessionBegin()) return 0;
   File f = fs.open(path, FILE_WRITE);
-  if (!f) { micDeinit(); return 0; }
+  if (!f) { rxSessionEnd(); return 0; }
   micSettle();
   const size_t CAP = 4096;
   int16_t* rb = (int16_t*)heap_caps_malloc(CAP * sizeof(int16_t), MALLOC_CAP_SPIRAM);
@@ -408,7 +462,7 @@ size_t recordToFile(fs::FS& fs, const char* path, uint32_t maxMs, const volatile
   }
   if (rb) heap_caps_free(rb);
   f.close();
-  micDeinit();
+  rxSessionEnd();
   return bytesWritten;
 }
 
@@ -514,10 +568,18 @@ bool loopbackSelfTest(uint16_t toneHz, uint32_t* magOut, uint16_t* rmsOut, LbDia
 
 // ---- lifecycle ---------------------------------------------------------------
 bool begin() { return true; }   // channels open lazily on first use
+// Full shutdown. CONTRACT: no recording may be in flight - end() force-tears-down
+// the shared channel, and unlike a rate change it cannot refuse (there is nothing
+// to fall back to). It is taken under s_spkMutex so it serializes against playback
+// and against a record session's setup/teardown; a caller must still stop any
+// active recordToBuffer/recordToFile first (the blocking read loop holds no lock,
+// so end() cannot wait it out). g_rxCount != 0 here means that contract was broken.
 void end() {
+  xSemaphoreTakeRecursive(s_spkMutex, portMAX_DELAY);
   spkClose();
   micDeinit();
   if constexpr (kCodec) codecTeardown();   // real teardown of the shared codec channel
+  xSemaphoreGiveRecursive(s_spkMutex);
 }
 
 }  // namespace solide::audio

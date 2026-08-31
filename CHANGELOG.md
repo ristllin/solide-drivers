@@ -3,6 +3,49 @@
 All notable changes to solide-drivers are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [0.8.1] - 2026-08-31
+
+Concurrency hardening on the shared-bus audio + touch surface (three fixes from an
+independent audit of the 0.7.x/0.8.0 range). No public API change (PATCH).
+
+### Fixed
+- **Shared-I2C access is now serialized across touch and codec.** The FT6336U
+  capacitive-touch controller and the ES8311 codec share one `Wire`. The touch
+  liveness ladder tears the bus down (`Wire.end()` -> bit-bang -> `Wire.begin()`) to
+  clear a wedged bus, but took no lock, so that teardown could land in the middle of
+  a codec register transaction on the other core (a use-after-free on the IDF i2c
+  handle, or a garbled codec write). Its in-code "the bus is already dead by the time
+  we get here" rationale did not hold for the monitor-mode NACK the ladder exists for.
+  A recursive `solide::I2cBusLock` (in `i2c_bus.h`) is now taken by every user of the
+  shared bus - the touch primitives (`ftTryRead`/`ftProbe`/power-config), the recovery
+  ladder (`ftBusClear`/`ftHardReset`), the codec register read/write primitives
+  (`es8311_read_reg`/`es8311_write_reg`, so `es8311_register_dump` is covered too), and
+  the one-time `i2cEnsureBegun()` - so a structural teardown and any bus transaction
+  can never overlap. Lock order is always `s_spkMutex` -> `i2cBusMutex` (touch takes
+  only the latter): no cycle.
+- **Codec rate-change no longer deletes the RX channel under an in-flight recording.**
+  `recordToBuffer`/`recordToFile` block in `i2s_channel_read(g_rx)` with no lock; a
+  playback at a different sample rate re-clocked the shared full-duplex channel,
+  `i2s_del_channel(g_rx)`-ing it out from under the parked reader (use-after-free). A
+  record session now marks RX in-flight (a refcount flipped under `s_spkMutex`), and a
+  rate change while RX is in flight is refused: the playback open returns failure
+  rather than tearing RX down or silently playing at the recording's rate (wrong
+  pitch). Same-rate concurrent record+play is unchanged. The decision is a new
+  portable, host-tested seam (`solide::audio::planReclock`, `test_audio_reclock`, 5
+  cases). `audio::end()` also now serializes its teardown under `s_spkMutex`; callers
+  must still stop any active recording before `end()` (its blocking read holds no lock).
+- **`es8311_register_dump()` no longer panics/reboots on an I2C hiccup.** It used
+  `ESP_ERROR_CHECK` on each register read, which `abort()`s the board on any NACK -
+  exactly what a diagnostic dump of a misbehaving codec provokes. It now logs the
+  failing register and continues, matching the file's own graceful-failure contract
+  (and the dump prints one register per line).
+
+### Notes
+- The two concurrency fixes (shared bus lock; RX-active re-clock refusal) are
+  device-layer FreeRTOS/I2S/Wire code that the native host suite cannot exercise
+  directly; the portable re-clock *decision* is host-tested, and the cross-task
+  serialization is designed for assertion on the nimbus HIL two-task leg.
+
 ## v0.6.1 (2026-08-24)
 
 - display_tft: full-frame blits sourced from PSRAM are staged band-by-band through

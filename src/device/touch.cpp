@@ -152,6 +152,7 @@ struct FtRead {
 
 // Read TD_STATUS + touch-point 1 X/Y (registers 0x02..0x06) in one transaction.
 [[maybe_unused]] FtRead ftTryRead() {
+  solide::I2cBusLock lock;   // one atomic transaction on the shared Wire (CUM-271)
   FtRead r;
   Wire.beginTransmission(TC_ADDR);
   Wire.write(uint8_t(0x02));
@@ -175,6 +176,7 @@ struct FtRead {
 // ACK-probe: does the controller answer its address? The begin()-time liveness
 // check, reused after each recovery step.
 [[maybe_unused]] bool ftProbe() {
+  solide::I2cBusLock lock;   // shared-bus transaction (CUM-271)
   Wire.beginTransmission(TC_ADDR);
   return Wire.endTransmission() == 0;
 }
@@ -190,6 +192,7 @@ struct FtRead {
 //   0xA5 PWR_MODE - current power mode the system is in (read-only). Sampled for
 //                   visibility (touch::powerMode()); never acted on blindly.
 [[maybe_unused]] void ftApplyPowerConfig() {
+  solide::I2cBusLock lock;   // two shared-bus transactions kept off the teardown path (CUM-271)
   Wire.beginTransmission(TC_ADDR);
   Wire.write(uint8_t(0xA5));
   if (Wire.endTransmission(false) == 0 && Wire.requestFrom(int(TC_ADDR), 1) == 1) {
@@ -208,13 +211,21 @@ struct FtRead {
 // SHARED-BUS SAFETY (the codec ES8311 @ 0x18 lives on this same SDA/SCL): the
 // clear only toggles the clock line and frames a STOP - it writes no device
 // register - and 9 clocks + STOP is exactly the sequence that returns EVERY
-// slave on the bus to idle, the codec included. We only reach here after K
-// consecutive faults, i.e. the bus is already unusable, so no healthy codec
-// transfer is being interrupted. Wire is torn down and re-begun on the SAME pins
-// (never a pin change): the one documented exception to i2c_bus.h's "never call
-// Wire.begin() directly from a driver" rule, which exists to stop pin races, not
-// same-pin recovery.
+// slave on the bus to idle, the codec included. Wire is torn down and re-begun on
+// the SAME pins (never a pin change): the one documented exception to i2c_bus.h's
+// "never call Wire.begin() directly from a driver" rule, which exists to stop pin
+// races, not same-pin recovery.
+//
+// The teardown is NOT inherently safe against a concurrent codec transaction: the
+// K-consecutive-faults precondition does NOT imply the SDA/SCL bus is electrically
+// dead. The CUM-248 fault this ladder exists for is the FT6336U auto-entering
+// low-power Monitor mode and NACKing while the bus is fine and the codec may be
+// mid-transaction. So the CALLER runs ftBusClear()/ftHardReset() under
+// solide::I2cBusLock (held here across the whole teardown), and every codec + touch
+// Wire primitive takes the same lock - that shared mutex, not the fault count, is
+// what makes the teardown safe (CUM-271).
 [[maybe_unused]] void ftBusClear() {
+  solide::I2cBusLock lock;   // exclude every other shared-bus user across end()..begin()
   Wire.end();
   pinMode(TC_SCL, OUTPUT_OPEN_DRAIN);
   pinMode(TC_SDA, INPUT_PULLUP);            // release SDA and watch for the slave to let go
@@ -239,6 +250,7 @@ struct FtRead {
 // its address well before the ~300 ms full report-ready time, so delay(50) after
 // release - proven by begin() - is enough for the probe).
 [[maybe_unused]] bool ftHardReset() {
+  solide::I2cBusLock lock;                   // keep reset + re-probe atomic vs the codec (CUM-271)
   if (TC_RST < 0) return ftProbe();         // no reset line wired: best-effort probe
   pinMode(TC_RST, OUTPUT);
   digitalWrite(TC_RST, LOW);  delay(10);    // >= Trst (5 ms) with margin
@@ -263,11 +275,13 @@ struct FtRead {
       return false;
     }
     case Step::BusClear:
+      // ftBusClear / ftProbe each take the shared bus lock internally (CUM-271),
+      // so the teardown cannot race a codec or touch transaction on the other core.
       ftBusClear();
       g_liveness.report(step, ftProbe(), now);
       return false;
     case Step::HardReset:
-      g_liveness.report(step, ftHardReset(), now);
+      g_liveness.report(step, ftHardReset(), now);   // ftHardReset holds the shared bus lock
       return false;
     case Step::Wait:
     default:

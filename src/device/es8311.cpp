@@ -17,6 +17,8 @@
 #include "esp_check.h"
 
 #include "es8311_reg.h"
+#include "solide/i2c_bus.h"   // shared-bus lock: serialize every codec Wire transaction
+                              // against the touch recovery teardown (CUM-271)
 
 
 typedef struct {
@@ -149,6 +151,7 @@ static const char *TAG = "ES8311";
 
 static inline esp_err_t es8311_write_reg(es8311_handle_t dev, uint8_t reg_addr, uint8_t data)
 {
+    solide::I2cBusLock lock;   // one atomic transaction on the shared Wire (CUM-271)
     es8311_dev_t *es = (es8311_dev_t *) dev;
     Wire.beginTransmission((uint8_t) es->dev_addr);
     Wire.write(reg_addr);
@@ -157,6 +160,7 @@ static inline esp_err_t es8311_write_reg(es8311_handle_t dev, uint8_t reg_addr, 
 }
 static inline esp_err_t es8311_read_reg(es8311_handle_t dev, uint8_t reg_addr, uint8_t *reg_value)
 {
+    solide::I2cBusLock lock;   // hold the repeated-start read as one atomic unit (CUM-271)
     es8311_dev_t *es = (es8311_dev_t *) dev;
     Wire.beginTransmission((uint8_t) es->dev_addr);
     Wire.write(reg_addr);
@@ -437,10 +441,18 @@ esp_err_t es8311_microphone_fade(es8311_handle_t dev, const es8311_fade_t fade)
 
 void es8311_register_dump(es8311_handle_t dev)
 {
+    // Diagnostic dump: a register dump is most often run precisely when the codec
+    // is misbehaving and likely to NAK, so a single I2C hiccup must NOT abort the
+    // board. Log the failing register and keep going - the same graceful-failure
+    // contract the rest of this file was converted to (see the closing note).
     for (int reg = 0; reg < 0x4A; reg++) {
-        uint8_t value;
-        ESP_ERROR_CHECK(es8311_read_reg(dev, reg, &value));
-        printf("REG:%02x: %02x", reg, value);
+        uint8_t value = 0;
+        const esp_err_t err = es8311_read_reg(dev, reg, &value);
+        if (err != ESP_OK) {
+            printf("REG:%02x: read error (%s)\n", reg, esp_err_to_name(err));
+            continue;
+        }
+        printf("REG:%02x: %02x\n", reg, value);
     }
 }
 
