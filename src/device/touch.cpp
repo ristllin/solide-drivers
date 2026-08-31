@@ -75,7 +75,7 @@ uint32_t                g_lastPollMs = 0;
 // is ordered after it at the composition root.
 inline SPIClass& bus() { return *solide::display_tft::bus(); }
 
-uint16_t readChannel(uint8_t cmd) {
+[[maybe_unused]] uint16_t readChannel(uint8_t cmd) {
   // 12-bit result arrives MSB-first across the two bytes following the command,
   // shifted left by 3.
   bus().transfer(cmd);
@@ -85,7 +85,7 @@ uint16_t readChannel(uint8_t cmd) {
 }
 
 // One full sample inside a single transaction.
-bool sampleRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
+[[maybe_unused]] bool sampleRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
   bus().beginTransaction(kTouchSPI);
   digitalWrite(T_CS, LOW);
 
@@ -111,7 +111,7 @@ bool sampleRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
   return pressure > kZThreshold && xs > 0 && ys > 0;
 }
 
-int16_t mapClamped(uint16_t v, uint16_t lo, uint16_t hi, int16_t outMax, bool invert) {
+[[maybe_unused]] int16_t mapClamped(uint16_t v, uint16_t lo, uint16_t hi, int16_t outMax, bool invert) {
   if (hi <= lo) return 0;
   if (v < lo) v = lo;
   if (v > hi) v = hi;
