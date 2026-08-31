@@ -1,13 +1,19 @@
 #pragma once
 #include <Arduino.h>
 
+#include "solide/touch_liveness.h"   // solide::touch::Health
+
 // ============================================================================
-// Resistive touch - XPT2046, the input device on a TFT-fitted board (it takes
-// the place of the EC11 encoder, whose pins the panel consumes).
+// Touch input on a TFT-fitted board (it takes the place of the EC11 encoder,
+// whose pins the panel consumes). Two controller variants, chosen by board data:
 //
-// It shares the display's SPI bus with its own chip select, and is clocked far
-// slower than the panel (the controller tops out around 2 MHz), so every read
-// runs in its own transaction at its own speed.
+//  - Resistive XPT2046 over SPI: shares the display's SPI bus with its own chip
+//    select, clocked far slower than the panel (~2 MHz), so every read runs in
+//    its own transaction at its own speed.
+//  - Capacitive FT6336U over I2C: shares one I2C bus with the audio codec. This
+//    path carries a liveness watchdog + recovery ladder (see health() and
+//    touch_liveness.h) because a silent I2C dropout after long idle is exactly
+//    how CUM-248 presented (touch dead until power-cycle).
 //
 // This driver reports DEBOUNCED, CALIBRATED PANEL COORDINATES - raw ADC counts
 // and the pressure threshold stay in here. Callers get {x, y, down} in the same
@@ -53,5 +59,17 @@ struct Calibration {
 };
 void setCalibration(const Calibration& c);
 Calibration calibration();
+
+// Capacitive (FT6336U/I2C) liveness + recovery health. Firmware reads this to
+// log/telemeter the controller's state and to notice a recovery (CUM-248). On a
+// resistive board every field stays zero. Never Serial-logged from the driver
+// hot path - the caller decides when to surface it.
+Health health();
+
+// Last value read from the FT6336U 0xA5 PWR_MODE register (current power mode
+// the controller is in), sampled at begin() and after each hard reset. 0xFF
+// means "not read" (resistive board, or the read itself failed). See
+// touch_liveness.h and the 0x86/0xA5 notes in touch.cpp.
+uint8_t powerMode();
 
 }  // namespace solide::touch

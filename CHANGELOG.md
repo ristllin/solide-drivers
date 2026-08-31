@@ -18,6 +18,34 @@ All notable changes to solide-drivers are recorded here. Format loosely follows
   SOLIDE_HAS_EPAPER=1 to keep building the e-paper API; the public header surface is
   unchanged either way.
 
+## [0.8.0] - 2026-08-31
+
+### Added
+- **`solide::touch::health()`** and **`solide::touch::powerMode()`** - visibility into
+  the capacitive (FT6336U/I2C) controller for firmware and tests. `health()` returns a
+  `solide::touch::Health` (failures, recoveries, busClears, hardResets,
+  consecutiveFailures, lastRecoveryMs, degraded); `powerMode()` returns the last-read
+  0xA5 PWR_MODE byte. Both are inert (zero / 0xFF) on a resistive board.
+- **`solide/touch_liveness.h`** - portable, host-tested `solide::touch::Liveness` recovery
+  policy (new `test_touch_liveness`, 9 cases).
+
+### Fixed
+- **Capacitive touch silently dying after long idle (root-cause of the CUM-248 signature:
+  firmware healthy, screen blanked by the saver, touch dead until power-cycle).** The
+  FT6336U path in `touch.cpp` previously returned a bare `false` on ANY I2C failure with
+  no recovery, no re-probe, and no visibility, so a controller that dropped off the shared
+  bus after long idle stayed dead forever. Now:
+  - The read distinguishes a completed transaction (finger or not - both healthy) from a
+    bus fault, and counts consecutive faults.
+  - After K=4 consecutive faults a recovery ladder runs: I2C bus-clear (9 SCL pulses +
+    STOP, safe on the codec-shared bus), then a TC_RST hardware re-reset + re-probe, then
+    exponential backoff (100 ms doubling to 4 s) so a truly-absent controller is not
+    hammered. Any successful transaction resets the streak and counts a recovery.
+  - At begin() (and after each hard reset) the driver reads 0xA5 PWR_MODE for visibility
+    and writes 0x86 CTRL = 0 to keep the controller in Active mode, disabling the
+    datasheet-documented monitor-mode auto-entry that can make it unresponsive when idle.
+  Resistive (XPT2046) boards are unaffected.
+
 ## [0.7.2] - 2026-08-30
 
 ### Fixed
