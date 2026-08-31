@@ -10,6 +10,7 @@
 
 #include "solide/board.h"
 #include "solide/boards/active_board.h"
+#include "solide/panel_health.h"   // portable, host-tested flip-aware compare (CUM-244)
 
 // ============================================================================
 // ILI9341 over SPI. Deliberately minimal: the caller composes a finished
@@ -124,8 +125,10 @@ void setFullWindow() {
 // MADCTL for the mounted orientation. Bit 3 (0x08) is BGR: these red modules are
 // BGR-wired, and without it every colour comes out channel-swapped (a blue UI
 // renders orange). MV (0x20) is the portrait->landscape rotation; adding MY|MX
-// turns the landscape surface through 180 degrees.
-uint8_t madctlFor(bool flip) { return flip ? 0xE8 : 0x28; }
+// turns the landscape surface through 180 degrees. The value and the health
+// compare share one definition in solide/panel_health.h (CUM-244), so panelInit
+// and healthy() cannot drift apart.
+using solide::display_tft::madctlFor;
 
 void panelInit() {
   // Hardware reset if the pin is fitted, else the software reset alone.
@@ -349,18 +352,14 @@ void reinit() { panelInit(); }
 // panel even when it is demonstrably working - unusable. RDDST does work.
 bool healthy() {
   const uint8_t got = uint8_t(readReg(0x09, 4) >> 24);
-  // RDDST's status byte mirrors MADCTL's fixed bits (BGR / MV / refresh order) but
-  // reports the MY/MX 180-flip bits (0xC0) as their power-on 0 regardless of the flip
-  // we write (measured on hardware, F6/CUM-188). So the EXPECTED readback is
-  // madctlFor(g_flip) with the flip bits CLEARED - not the flip bits masked out of the
-  // compare. Clearing them on the expected side keeps a flipped panel from reading
-  // unhealthy forever (both sides agree on 0x28, so no watchdog thrash), while STILL
-  // checking got's MY/MX against their expected 0: a partial state loss that raises
-  // them (which masking 0xC0 out of both sides would wave through as healthy) now
-  // fails. A reset reverts the fixed bits too, so 0x00 still fails. bit0 is the
-  // refresh scan-toggle - drop it.
-  const uint8_t expected = uint8_t(madctlFor(g_flip) & ~0xC0);   // 0x28 for both flips
-  return (got & 0xFE) == expected;
+  // The flip-aware compare is a PURE function pinned by host tests
+  // (test/test_panel_health, CUM-244): RDDST's top byte mirrors MADCTL's fixed
+  // bits but reports the MY/MX flip bits (0xC0) as their power-on 0 regardless
+  // of the flip we wrote (measured, CUM-188), so the expected value clears them
+  // on the EXPECTED side rather than masking 0xC0 out of the compare - which
+  // keeps a flipped panel from thrashing while still catching a partial state
+  // loss that raises MY/MX (the CUM-231 white-screen fault). See panel_health.h.
+  return solide::display_tft::panelHealthy(got, g_flip);
 }
 
 // Write a known pixel pattern at the CURRENT clock, then read it back at a slow,
