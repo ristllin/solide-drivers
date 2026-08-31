@@ -75,7 +75,7 @@ uint32_t                g_lastPollMs = 0;
 // is ordered after it at the composition root.
 inline SPIClass& bus() { return *solide::display_tft::bus(); }
 
-uint16_t readChannel(uint8_t cmd) {
+[[maybe_unused]] uint16_t readChannel(uint8_t cmd) {
   // 12-bit result arrives MSB-first across the two bytes following the command,
   // shifted left by 3.
   bus().transfer(cmd);
@@ -85,7 +85,7 @@ uint16_t readChannel(uint8_t cmd) {
 }
 
 // One full sample inside a single transaction.
-bool sampleRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
+[[maybe_unused]] bool sampleRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
   bus().beginTransaction(kTouchSPI);
   digitalWrite(T_CS, LOW);
 
@@ -111,7 +111,7 @@ bool sampleRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
   return pressure > kZThreshold && xs > 0 && ys > 0;
 }
 
-int16_t mapClamped(uint16_t v, uint16_t lo, uint16_t hi, int16_t outMax, bool invert) {
+[[maybe_unused]] int16_t mapClamped(uint16_t v, uint16_t lo, uint16_t hi, int16_t outMax, bool invert) {
   if (hi <= lo) return 0;
   if (v < lo) v = lo;
   if (v > hi) v = hi;
@@ -133,23 +133,146 @@ constexpr int8_t  TC_INT  = solide::activeBoard().touchI2c.intr;
 constexpr int8_t  TC_RST  = solide::activeBoard().touchI2c.rst;
 constexpr uint8_t TC_ADDR = solide::activeBoard().touchI2c.addr;
 
+// Liveness watchdog + recovery policy for the shared-bus capacitive controller
+// (CUM-248). The device layer below runs whatever step it asks for and reports
+// the outcome; the portable state machine counts, decides, and accounts.
+solide::touch::Liveness g_liveness;
+uint8_t                 g_pmode = 0xFF;   // last 0xA5 PWR_MODE read (0xFF = unread)
+
+// Outcome of one attempted FT6336U read transaction. `ok` separates a completed
+// I2C transaction (finger or not - both healthy) from a bus fault; `hit` is a
+// valid touch point. This distinction is the whole point: the old code returned
+// a bare false for "no finger" AND "bus dead", so nothing upstream could tell a
+// resting panel from a wedged one.
+struct FtRead {
+  bool     ok = false;    // I2C transaction completed; false = endTransmission/short-read fault
+  bool     hit = false;   // ok && a valid touch point present
+  uint16_t x = 0, y = 0;
+};
+
 // Read TD_STATUS + touch-point 1 X/Y (registers 0x02..0x06) in one transaction.
-// Returns native portrait coordinates for the first point, or false if untouched.
-bool ftReadPoint(uint16_t& x, uint16_t& y) {
+[[maybe_unused]] FtRead ftTryRead() {
+  FtRead r;
   Wire.beginTransmission(TC_ADDR);
   Wire.write(uint8_t(0x02));
-  if (Wire.endTransmission(false) != 0) return false;   // repeated start
-  if (Wire.requestFrom(int(TC_ADDR), 5) != 5) return false;
+  if (Wire.endTransmission(false) != 0) return r;         // repeated start failed -> fault
+  if (Wire.requestFrom(int(TC_ADDR), 5) != 5) return r;   // short read -> fault
   const uint8_t status = Wire.read();   // 0x02 TD_STATUS (low nibble = #points)
   const uint8_t xh = Wire.read();       // 0x03 P1_XH (0x0F = X[11:8])
   const uint8_t xl = Wire.read();       // 0x04 P1_XL
   const uint8_t yh = Wire.read();       // 0x05 P1_YH (0x0F = Y[11:8])
   const uint8_t yl = Wire.read();       // 0x06 P1_YL
+  r.ok = true;                          // transaction succeeded regardless of finger count
   const uint8_t n = status & 0x0F;
-  if (n == 0 || n > 2) return false;    // 0 = up; >2 = glitch
-  x = (uint16_t(xh & 0x0F) << 8) | xl;
-  y = (uint16_t(yh & 0x0F) << 8) | yl;
-  return true;
+  if (n >= 1 && n <= 2) {               // 0 = untouched (healthy); >2 = glitch (ignore point)
+    r.x = (uint16_t(xh & 0x0F) << 8) | xl;
+    r.y = (uint16_t(yh & 0x0F) << 8) | yl;
+    r.hit = true;
+  }
+  return r;
+}
+
+// ACK-probe: does the controller answer its address? The begin()-time liveness
+// check, reused after each recovery step.
+[[maybe_unused]] bool ftProbe() {
+  Wire.beginTransmission(TC_ADDR);
+  return Wire.endTransmission() == 0;
+}
+
+// FT6336U power/monitor-mode setup. Register map: FocalTech "Application Note for
+// FT6x06 CTPM", Working Mode Register Map.
+//   0x86 CTRL     - 0 = keep Active mode when there is no touch; 1 (chip default)
+//                   = auto switch from Active to Monitor (low-power) mode when
+//                   idle. We write 0 so the controller never drops into the
+//                   low-power state where it can go unresponsive on the shared
+//                   bus after long idle - the CUM-248 signature. One documented
+//                   register, no cargo-cult.
+//   0xA5 PWR_MODE - current power mode the system is in (read-only). Sampled for
+//                   visibility (touch::powerMode()); never acted on blindly.
+[[maybe_unused]] void ftApplyPowerConfig() {
+  Wire.beginTransmission(TC_ADDR);
+  Wire.write(uint8_t(0xA5));
+  if (Wire.endTransmission(false) == 0 && Wire.requestFrom(int(TC_ADDR), 1) == 1) {
+    g_pmode = Wire.read();
+  }
+  Wire.beginTransmission(TC_ADDR);
+  Wire.write(uint8_t(0x86));
+  Wire.write(uint8_t(0x00));      // keep Active mode: disable monitor-mode auto-entry
+  Wire.endTransmission();
+}
+
+// I2C bus-clear: free a slave that is holding SDA low by clocking up to 9 SCL
+// pulses with SDA released, then issuing a manual STOP. This is the standard I2C
+// bus-recovery procedure.
+//
+// SHARED-BUS SAFETY (the codec ES8311 @ 0x18 lives on this same SDA/SCL): the
+// clear only toggles the clock line and frames a STOP - it writes no device
+// register - and 9 clocks + STOP is exactly the sequence that returns EVERY
+// slave on the bus to idle, the codec included. We only reach here after K
+// consecutive faults, i.e. the bus is already unusable, so no healthy codec
+// transfer is being interrupted. Wire is torn down and re-begun on the SAME pins
+// (never a pin change): the one documented exception to i2c_bus.h's "never call
+// Wire.begin() directly from a driver" rule, which exists to stop pin races, not
+// same-pin recovery.
+[[maybe_unused]] void ftBusClear() {
+  Wire.end();
+  pinMode(TC_SCL, OUTPUT_OPEN_DRAIN);
+  pinMode(TC_SDA, INPUT_PULLUP);            // release SDA and watch for the slave to let go
+  digitalWrite(TC_SCL, HIGH);
+  for (int i = 0; i < 9; i++) {
+    digitalWrite(TC_SCL, LOW);  delayMicroseconds(5);
+    digitalWrite(TC_SCL, HIGH); delayMicroseconds(5);
+    if (digitalRead(TC_SDA)) break;         // SDA released: bus is free
+  }
+  // Manual STOP: SDA low->high while SCL is high.
+  pinMode(TC_SDA, OUTPUT_OPEN_DRAIN);
+  digitalWrite(TC_SDA, LOW);  delayMicroseconds(5);
+  digitalWrite(TC_SCL, HIGH); delayMicroseconds(5);
+  digitalWrite(TC_SDA, HIGH); delayMicroseconds(5);
+  // Hand the pins back to the I2C peripheral, same pins, same clock.
+  Wire.begin(TC_SDA, TC_SCL);
+  Wire.setClock(400000);
+}
+
+// Re-run begin()'s TC_RST reset dance, re-apply the power config, then re-probe.
+// RSTN is active-low (datasheet: reset pulse >= 5 ms low; the controller ACKs
+// its address well before the ~300 ms full report-ready time, so delay(50) after
+// release - proven by begin() - is enough for the probe).
+[[maybe_unused]] bool ftHardReset() {
+  if (TC_RST < 0) return ftProbe();         // no reset line wired: best-effort probe
+  pinMode(TC_RST, OUTPUT);
+  digitalWrite(TC_RST, LOW);  delay(10);    // >= Trst (5 ms) with margin
+  digitalWrite(TC_RST, HIGH); delay(50);    // controller boot
+  ftApplyPowerConfig();                     // the config does not survive a reset
+  return ftProbe();
+}
+
+// One capacitive poll cycle with recovery. Drives g_liveness: plans the step,
+// runs the hardware, reports the outcome. Returns true with x/y set only on a
+// valid touch point this cycle. The bus-clear / hard-reset steps run rarely (only
+// while degraded) but can stall this call ~10-60 ms; that is acceptable versus a
+// permanently dead panel, and it never happens on a healthy bus.
+[[maybe_unused]] bool capPoll(uint32_t now, uint16_t& x, uint16_t& y) {
+  using Step = solide::touch::Liveness::Step;
+  const Step step = g_liveness.plan(now);
+  switch (step) {
+    case Step::Attempt: {
+      const FtRead r = ftTryRead();
+      g_liveness.report(step, r.ok, now);
+      if (r.ok && r.hit) { x = r.x; y = r.y; return true; }
+      return false;
+    }
+    case Step::BusClear:
+      ftBusClear();
+      g_liveness.report(step, ftProbe(), now);
+      return false;
+    case Step::HardReset:
+      g_liveness.report(step, ftHardReset(), now);
+      return false;
+    case Step::Wait:
+    default:
+      return false;   // backoff: idle this cycle, treated as "up"
+  }
 }
 
 }  // namespace
@@ -166,8 +289,8 @@ bool begin() {
     }
     if (TC_INT >= 0) pinMode(TC_INT, INPUT);   // polled, not IRQ-driven
     solide::i2cEnsureBegun(TC_SDA, TC_SCL);    // shared with the codec
-    Wire.beginTransmission(TC_ADDR);           // ACK probe = present
-    g_present = (Wire.endTransmission() == 0);
+    g_present = ftProbe();                      // ACK probe = present
+    if (g_present) ftApplyPowerConfig();        // read 0xA5, keep Active mode (0x86=0)
     return g_present;
   } else {
     if (T_CS < 0) return false;   // no touch panel on this board
@@ -188,10 +311,13 @@ bool readRaw(uint16_t& x, uint16_t& y, uint16_t& z) {
   if (!g_present) return false;
   if constexpr (kCapacitive) {
     z = 0;
-    const bool hit = ftReadPoint(x, y);
-    if (hit) z = 1000;                 // capacitive has no pressure; report a flag
-    else { x = 0; y = 0; }
-    return hit;
+    // Raw diagnostic path (calibration/console): a plain read, no recovery ladder
+    // and no liveness accounting - callers may poll this in a tight loop, and the
+    // watchdog belongs to read()'s rate-limited cadence.
+    const FtRead r = ftTryRead();
+    if (r.ok && r.hit) { x = r.x; y = r.y; z = 1000; return true; }
+    x = 0; y = 0;
+    return false;
   } else {
     return sampleRaw(x, y, z);
   }
@@ -234,7 +360,12 @@ Point read() {
   g_lastPollMs = now;
 
   uint16_t rx = 0, ry = 0, rz = 0;
-  const bool hit = kCapacitive ? ftReadPoint(rx, ry) : sampleRaw(rx, ry, rz);
+  bool hit;
+  if constexpr (kCapacitive) {
+    hit = capPoll(now, rx, ry);   // drives the liveness watchdog + recovery ladder
+  } else {
+    hit = sampleRaw(rx, ry, rz);
+  }
 
   if (hit) {
     g_upCount = 0;
@@ -258,5 +389,8 @@ void setCalibration(const Calibration& c) {
   portEXIT_CRITICAL(&g_calMux);
 }
 Calibration calibration() { return calSnapshot(); }
+
+Health health() { return g_liveness.health(); }
+uint8_t powerMode() { return g_pmode; }
 
 }  // namespace solide::touch
